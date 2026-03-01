@@ -1,0 +1,2344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GasLab — Interactive Gas Laws Explorer</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Syne:wght@700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#050a14;--surface:#0d1525;--surface2:#0f1a2e;
+  --border:rgba(79,158,255,0.18);--accent:#4f9eff;--accent2:#ff6b6b;
+  --accent3:#7dff8a;--accent4:#ffd166;--purple:#a78bff;
+  --text:#e8f0ff;--muted:#5a6f8a;--glow:rgba(79,158,255,0.35);
+  --real:#ff6b6b;--ideal:#4f9eff;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;display:flex;flex-direction:column;}
+#bgCanvas{position:fixed;inset:0;z-index:0;pointer-events:none;}
+
+/* HEADER */
+header{position:relative;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:12px 24px 0;flex-shrink:0;}
+.logo{font-family:'Syne',sans-serif;font-size:1.6rem;font-weight:800;letter-spacing:-1px;background:linear-gradient(135deg,#4f9eff,#a78bff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.logo em{-webkit-text-fill-color:var(--accent3);font-style:normal;}
+.tagline{font-size:.65rem;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-top:1px;}
+
+/* LAW TABS */
+.law-tabs{position:relative;z-index:10;display:flex;gap:5px;padding:8px 24px 0;flex-shrink:0;flex-wrap:wrap;}
+.law-tab{padding:5px 14px;border-radius:100px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-family:'Space Grotesk',sans-serif;font-size:.75rem;font-weight:600;cursor:pointer;transition:all .2s;}
+.law-tab:hover{color:var(--text);border-color:var(--accent);}
+.law-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 0 14px var(--glow);}
+.stp-btn{padding:5px 14px;border-radius:100px;border:1px solid rgba(125,255,138,0.35);background:rgba(125,255,138,0.08);color:var(--accent3);font-family:'Space Grotesk',sans-serif;font-size:.75rem;font-weight:600;cursor:pointer;transition:all .2s;margin-left:6px;}
+.stp-btn:hover{background:rgba(125,255,138,0.18);border-color:var(--accent3);box-shadow:0 0 10px rgba(125,255,138,0.2);}
+.stp-btn.active{background:var(--accent3);color:#050a14;border-color:var(--accent3);box-shadow:0 0 14px rgba(125,255,138,0.4);}
+
+/* MAIN */
+.main{position:relative;z-index:10;display:grid;grid-template-columns:230px 72px 1fr 245px;gap:12px;padding:8px 24px 14px;flex:1;min-height:0;}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px;overflow-y:auto;}
+
+/* FORCE BAR */
+.force-panel{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:12px 10px;display:flex;flex-direction:column;align-items:stretch;}
+.force-bar-title{font-size:.56rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:8px;text-align:center;}
+.force-bar-outer{flex:1;min-height:180px;position:relative;border-radius:10px;background:rgba(5,10,20,0.8);border:1px solid rgba(79,158,255,0.12);overflow:hidden;}
+.force-bar-fill{position:absolute;bottom:0;left:0;right:0;border-radius:8px;transition:height .3s cubic-bezier(.22,.68,0,1.2);}
+.force-bar-shimmer{position:absolute;bottom:0;left:0;right:0;height:40%;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.12) 0%,transparent 100%);pointer-events:none;}
+.force-bar-glow{position:absolute;bottom:0;left:-20%;right:-20%;height:80px;border-radius:50%;filter:blur(16px);opacity:0;transition:opacity .3s ease,background .3s ease;}
+.force-bar-peak{position:absolute;left:6px;right:6px;height:2px;border-radius:2px;background:rgba(255,255,255,0.7);box-shadow:0 0 6px rgba(255,255,255,0.5);transition:bottom .08s linear;opacity:0;}
+.force-ticks{position:absolute;top:4px;bottom:4px;right:3px;display:flex;flex-direction:column;justify-content:space-between;}
+.force-tick-lbl{font-size:.4rem;color:rgba(90,111,138,0.6);text-align:right;line-height:1;}
+.force-tick-line{position:absolute;left:0;right:22px;height:1px;background:rgba(255,255,255,0.04);}
+.force-bar-val{text-align:center;margin-top:7px;font-family:'JetBrains Mono',monospace;font-size:.9rem;font-weight:700;letter-spacing:.5px;transition:color .3s;}
+.force-bar-unit{text-align:center;font-size:.52rem;color:var(--muted);margin-top:1px;letter-spacing:1px;text-transform:uppercase;}
+.force-bar-sub{text-align:center;font-size:.5rem;color:var(--muted);margin-top:4px;line-height:1.4;}
+.panel-title{font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:10px;}
+
+/* GAS GRID — multi-select tank mode */
+.gas-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:10px;}
+.gas-btn{padding:6px 5px 5px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;transition:all .2s;text-align:center;position:relative;}
+.gas-btn:hover{border-color:var(--accent);transform:translateY(-1px);}
+.gas-btn.in-tank{background:rgba(79,158,255,0.1);}
+.gas-formula{font-family:'JetBrains Mono',monospace;font-size:.85rem;font-weight:500;}
+.gas-name{font-size:.56rem;color:var(--muted);margin-top:1px;}
+.gas-check{position:absolute;top:3px;right:4px;font-size:.6rem;opacity:0;transition:opacity .2s;}
+.gas-btn.in-tank .gas-check{opacity:1;}
+/* Moles row inside tank-active gas */
+.gas-moles-row{display:flex;align-items:center;justify-content:center;gap:4px;margin-top:4px;opacity:0;height:0;overflow:hidden;transition:opacity .2s,height .2s;}
+.gas-btn.in-tank .gas-moles-row{opacity:1;height:18px;}
+.mol-btn{width:16px;height:16px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:.75rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.mol-btn:hover{border-color:var(--accent);background:rgba(79,158,255,0.15);}
+.mol-val{font-family:'JetBrains Mono',monospace;font-size:.65rem;min-width:22px;text-align:center;}
+/* Tank summary strip */
+.tank-strip{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:6px 10px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:5px;min-height:28px;align-items:center;}
+.tank-chip{display:flex;align-items:center;gap:3px;padding:2px 7px;border-radius:6px;font-size:.65rem;font-family:'JetBrains Mono',monospace;font-weight:500;}
+.tank-empty{font-size:.65rem;color:var(--muted);}
+
+
+/* MODE TOGGLE */
+.mode-toggle{display:flex;border:1px solid var(--border);border-radius:9px;overflow:hidden;margin-bottom:12px;}
+.mode-btn{flex:1;padding:8px 4px;border:none;background:transparent;color:var(--muted);font-family:'Space Grotesk',sans-serif;font-size:.75rem;font-weight:600;cursor:pointer;transition:all .2s;line-height:1.2;}
+.mode-btn.active.ideal-mode{background:var(--ideal);color:#fff;}
+.mode-btn.active.real-mode{background:var(--real);color:#fff;}
+
+/* SLIDERS */
+.slider-group{margin-bottom:10px;}
+.slider-label{display:flex;justify-content:space-between;margin-bottom:4px;align-items:baseline;}
+.slider-name{font-size:.75rem;font-weight:600;}
+.slider-val{font-family:'JetBrains Mono',monospace;font-size:.82rem;color:var(--accent);}
+.slider-val.t{color:var(--accent2);} .slider-val.v{color:var(--accent3);} .slider-val.n{color:var(--accent4);}
+input[type=range]{width:100%;height:5px;-webkit-appearance:none;background:var(--surface2);border-radius:3px;outline:none;cursor:pointer;margin-bottom:3px;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:var(--accent);box-shadow:0 0 7px var(--glow);cursor:pointer;}
+input[type=range].temp::-webkit-slider-thumb{background:var(--accent2);box-shadow:0 0 7px rgba(255,107,107,.5);}
+input[type=range].vol::-webkit-slider-thumb{background:var(--accent3);box-shadow:0 0 7px rgba(125,255,138,.5);}
+input[type=range].moles::-webkit-slider-thumb{background:var(--accent4);box-shadow:0 0 7px rgba(255,209,102,.5);}
+.lock-btn{font-size:.63rem;padding:2px 7px;border-radius:5px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;transition:all .2s;font-family:'Space Grotesk',sans-serif;}
+.lock-btn.locked{background:rgba(255,107,107,.12);border-color:var(--accent2);color:var(--accent2);}
+/* Dim the whole slider group when locked */
+.slider-group.is-locked input[type=range]{opacity:0.3;pointer-events:none;cursor:not-allowed;}
+.slider-group.is-locked .slider-val{opacity:0.4;}
+
+.sim-col{display:flex;flex-direction:column;gap:8px;min-height:0;}
+.sim-wrap{position:relative;flex:1;border-radius:16px;overflow:hidden;border:1px solid var(--border);background:var(--surface);min-height:0;}
+#simCanvas{position:absolute;top:0;left:0;width:100%;height:100%;}
+
+
+/* REAL MODE OVERLAY BANNER on canvas */
+
+/* SPEED LEGEND */
+
+/* EQUATION BOX */
+.eq-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:14px;flex-shrink:0;}
+.eq-law{font-family:'Syne',sans-serif;font-size:.82rem;font-weight:800;color:var(--accent);white-space:nowrap;}
+.eq-formula{font-family:'JetBrains Mono',monospace;font-size:.95rem;white-space:nowrap;}
+.eq-desc{font-size:.68rem;color:var(--muted);flex:1;}
+
+/* RIGHT PANEL */
+.data-panel{display:flex;flex-direction:column;gap:7px;}
+.reading-card{background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:9px 12px;}
+.reading-label{font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:3px;}
+.reading-value{font-family:'JetBrains Mono',monospace;font-size:1.1rem;font-weight:500;}
+.blue{color:var(--accent);}  .red{color:var(--accent2);}  .green{color:var(--accent3);}  .yellow{color:var(--accent4);}
+
+/* Z GAUGE */
+.z-card{background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:9px 12px;}
+.z-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;}
+.z-label{font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;}
+.z-value{font-family:'JetBrains Mono',monospace;font-size:1.1rem;font-weight:500;color:var(--purple);}
+.z-gauge-wrap{position:relative;height:12px;border-radius:6px;background:rgba(255,255,255,0.04);border:1px solid var(--border);overflow:hidden;margin-bottom:5px;}
+.z-gauge-track{position:absolute;top:0;left:0;right:0;bottom:0;
+  background:linear-gradient(90deg,#ff6b6b 0%,#ffd166 30%,#7dff8a 50%,#ffd166 70%,#ff6b6b 100%);}
+.z-needle{position:absolute;top:-2px;bottom:-2px;width:3px;border-radius:2px;background:#fff;box-shadow:0 0 6px #fff;transform:translateX(-50%);transition:left .3s ease;}
+.z-scale{display:flex;justify-content:space-between;font-size:.58rem;color:var(--muted);font-family:'JetBrains Mono',monospace;}
+.kinetics-card{background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:9px 12px;}
+.kinetics-gas-row{display:flex;align-items:baseline;gap:6px;margin-bottom:6px;}
+.kinetics-gas-label{font-family:'JetBrains Mono',monospace;font-size:.72rem;font-weight:700;min-width:32px;}
+.kinetics-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;flex:1;}
+.kinetics-stat{text-align:center;}
+.kinetics-stat-val{font-family:'JetBrains Mono',monospace;font-size:.72rem;font-weight:600;}
+.kinetics-stat-lbl{font-size:.52rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;line-height:1.2;}
+.kinetics-header{display:grid;grid-template-columns:32px 1fr 1fr 1fr;gap:3px;margin-bottom:4px;}
+.kinetics-col-lbl{font-size:.52rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:center;line-height:1.3;}
+.kinetics-note{font-size:.55rem;color:var(--muted);margin-top:5px;font-style:italic;}
+.z-badge.ideal{background:rgba(125,255,138,.1);color:var(--accent3);border:1px solid rgba(125,255,138,.2);}
+.z-badge.attract{background:rgba(255,209,102,.1);color:var(--accent4);border:1px solid rgba(255,209,102,.2);}
+.z-badge.repel{background:rgba(255,107,107,.1);color:var(--accent2);border:1px solid rgba(255,107,107,.2);}
+
+/* DEVIATION READOUT */
+.dev-card{background:linear-gradient(135deg,rgba(255,107,107,.06),rgba(167,139,255,.04));border:1px solid rgba(255,107,107,.2);border-radius:11px;padding:9px 12px;display:none;}
+.dev-card.visible{display:block;}
+.dev-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+.dev-label{font-size:.62rem;color:var(--muted);}
+.dev-val{font-family:'JetBrains Mono',monospace;font-size:.88rem;font-weight:500;}
+.dev-val.pos{color:var(--accent2);}
+.dev-val.neg{color:var(--accent4);}
+.dev-val.zero{color:var(--accent3);}
+.dev-explain{font-size:.65rem;color:var(--muted);line-height:1.45;margin-top:5px;padding-top:5px;border-top:1px solid var(--border);}
+
+/* GRAPH */
+.graph-card{background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:10px;}
+.graph-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.graph-title{font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;}
+.graph-legend{display:flex;gap:8px;}
+.graph-legend-item{display:flex;align-items:center;gap:4px;font-size:.58rem;color:var(--muted);}
+.graph-legend-line{width:14px;height:2px;border-radius:1px;}
+#graphCanvas{display:block;width:100%;}
+
+/* LAW CARD */
+.law-card{background:linear-gradient(135deg,rgba(79,158,255,.07),rgba(167,139,255,.04));border:1px solid rgba(79,158,255,.18);border-radius:11px;padding:10px 12px;}
+.law-card h3{font-family:'Syne',sans-serif;font-size:.78rem;color:var(--accent);margin-bottom:4px;}
+.law-card p{font-size:.68rem;color:var(--muted);line-height:1.5;}
+
+/* GRAHAM */
+.graham-result{background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.2);border-radius:11px;padding:9px 12px;display:none;}
+#grahamPanel{display:none;}
+
+/* CRITICAL TEMPERATURE PANEL */
+.tc-card{background:linear-gradient(135deg,rgba(167,139,255,.08),rgba(79,158,255,.05));border:1px solid rgba(167,139,255,.25);border-radius:11px;padding:9px 12px;}
+.tc-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+.tc-row:last-child{margin-bottom:0;}
+.tc-label{font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;}
+.tc-val{font-family:'JetBrains Mono',monospace;font-size:.82rem;font-weight:600;}
+.tc-bar-wrap{margin-top:7px;margin-bottom:2px;position:relative;height:6px;background:rgba(255,255,255,.06);border-radius:4px;overflow:visible;}
+.tc-bar-fill{height:100%;border-radius:4px;transition:width .35s ease,background .35s ease;}
+.tc-bar-marker{position:absolute;top:-3px;width:2px;height:12px;background:rgba(167,139,255,.9);border-radius:2px;transform:translateX(-50%);box-shadow:0 0 6px rgba(167,139,255,.5);}
+.tc-bar-labels{display:flex;justify-content:space-between;font-size:.47rem;color:var(--muted);margin-top:2px;}
+.tc-phase-row{display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px solid var(--border);}
+/* Supercritical warning banner */
+.sc-warning{background:linear-gradient(135deg,rgba(255,209,102,.13),rgba(255,107,107,.07));border:1px solid rgba(255,209,102,.4);border-radius:10px;padding:9px 12px;display:none;}
+.sc-warning.visible{display:block;animation:scPulse 2s ease-in-out infinite;}
+@keyframes scPulse{0%,100%{border-color:rgba(255,209,102,.4);}50%{border-color:rgba(255,209,102,.75);}}
+.sc-warning-title{font-size:.65rem;font-weight:700;color:#ffd166;margin-bottom:5px;display:flex;align-items:center;gap:5px;}
+.sc-warning-body{font-size:.6rem;color:#c8b87a;line-height:1.55;}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+</style>
+</head>
+<body>
+<canvas id="bgCanvas"></canvas>
+
+<header>
+  <div>
+    <div class="logo">Gas<em>Lab</em></div>
+    <div class="tagline">Gas Laws Explorer</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <div style="text-align:right;font-size:.95rem;font-weight:600;color:var(--text);">Ideal &amp; Real Gas Behavior</div>
+    <button id="muteBtn" onclick="
+      _snd.muted=!_snd.muted;
+      this.textContent=_snd.muted?'🔇 Sound: OFF':'🔊 Sound: ON';
+      this.style.background=_snd.muted?'rgba(90,111,138,0.15)':'rgba(125,255,138,0.15)';
+      this.style.borderColor=_snd.muted?'rgba(90,111,138,0.4)':'rgba(125,255,138,0.5)';
+      this.style.color=_snd.muted?'var(--muted)':'var(--accent3)';
+      this.style.boxShadow=_snd.muted?'none':'0 0 12px rgba(125,255,138,0.25)';
+    " style="padding:7px 18px;border-radius:100px;border:1px solid rgba(90,111,138,0.4);background:rgba(90,111,138,0.15);color:var(--muted);font-family:'Space Grotesk',sans-serif;font-size:.85rem;font-weight:700;cursor:pointer;letter-spacing:.3px;transition:all .2s;white-space:nowrap;">🔇 Sound: OFF</button>
+  </div>
+</header>
+
+<div class="law-tabs" id="lawTabs">
+  <button class="law-tab active" data-law="boyle">Boyle's</button>
+  <button class="law-tab" data-law="charles">Charles's</button>
+  <button class="law-tab" data-law="gay">Gay-Lussac's</button>
+  <button class="law-tab" data-law="avogadro">Avogadro's</button>
+  <button class="law-tab" data-law="graham">Graham's</button>
+  <button class="law-tab" data-law="combined">Combined</button>
+  <button class="stp-btn" id="stpBtn">STP</button>
+</div>
+
+<div class="main">
+
+  <!-- LEFT CONTROLS -->
+  <div class="panel">
+    <div class="panel-title">Gas Tank — click to add/remove</div>
+    <!-- Tank contents summary -->
+    <div class="tank-strip" id="tankStrip"><span class="tank-empty">Tank is empty — add a gas below</span></div>
+    <div class="gas-grid" id="gasGrid"></div>
+
+    <div id="grahamPanel">
+      <div class="panel-title">Compare Gas (Graham's)</div>
+      <div class="gas-grid" id="gasGrid2">
+        <div class="gas-btn" data-gas2="N2"><div class="gas-formula">N₂</div><div class="gas-name">Nitrogen</div></div>
+        <div class="gas-btn active" data-gas2="O2"><div class="gas-formula">O₂</div><div class="gas-name">Oxygen</div></div>
+        <div class="gas-btn" data-gas2="CO2"><div class="gas-formula">CO₂</div><div class="gas-name">CO₂</div></div>
+        <div class="gas-btn" data-gas2="CH4"><div class="gas-formula">CH₄</div><div class="gas-name">Methane</div></div>
+        <div class="gas-btn" data-gas2="H2O"><div class="gas-formula" style="color:#38bdf8">H₂O</div><div class="gas-name">Water</div></div>
+        <div class="gas-btn" data-gas2="Ne"><div class="gas-formula" style="color:#fb923c">Ne</div><div class="gas-name">Neon</div></div>
+      </div>
+    </div>
+
+    <div class="panel-title">Behavior Mode</div>
+    <div class="mode-toggle" id="modeToggle">
+      <button class="mode-btn active ideal-mode" data-mode="ideal">Ideal Gas<br><span style="font-size:.6rem;opacity:.8">Point particles, no forces</span></button>
+      <button class="mode-btn real-mode" data-mode="real">Real Gas<br><span style="font-size:.6rem;opacity:.8">van der Waals</span></button>
+    </div>
+
+    <div class="panel-title">Parameters</div>
+    <div class="slider-group">
+      <div class="slider-label">
+        <span class="slider-name">Pressure <span style="font-size:.68rem;color:var(--muted)">(atm)</span></span>
+        <span class="slider-val" id="pVal">1.00</span>
+      </div>
+      <input type="range" id="pSlider" min="0" max="1000" step="1" value="426">
+      <button class="lock-btn" id="lockP">Lock P</button>
+    </div>
+    <div class="slider-group">
+      <div class="slider-label">
+        <span class="slider-name">Temperature <span style="font-size:.68rem;color:var(--muted)">(K)</span></span>
+        <span class="slider-val t" id="tVal">273</span>
+      </div>
+      <input type="range" id="tSlider" class="temp" min="0" max="735" step="1" value="273">
+      <button class="lock-btn" id="lockT">Lock T</button>
+    </div>
+    <div class="slider-group">
+      <div class="slider-label">
+        <span class="slider-name">Volume <span style="font-size:.68rem;color:var(--muted)">(L)</span></span>
+        <span class="slider-val v" id="vVal">22.4</span>
+      </div>
+      <input type="range" id="vSlider" class="vol" min="0" max="1000" step="1" value="783">
+      <button class="lock-btn" id="lockV">Lock V</button>
+    </div>
+    <div class="slider-group">
+      <div class="slider-label">
+        <span class="slider-name">Moles <span style="font-size:.68rem;color:var(--muted)">(mol)</span></span>
+        <span class="slider-val n" id="nVal">1.00</span>
+      </div>
+      <input type="range" id="nSlider" class="moles" min="0.1" max="5" step="0.05" value="1.0">
+      <button class="lock-btn" id="lockN">Lock n</button>
+    </div>
+  </div>
+
+  <!-- MOLECULAR PRESSURE BAR -->
+  <div class="force-panel">
+    <div class="force-bar-title">Molecular Pressure</div>
+    <div class="force-bar-outer" id="forceBarOuter">
+      <div class="force-ticks" id="forceTicks"></div>
+      <div class="force-bar-glow" id="forceBarGlow"></div>
+      <div class="force-bar-fill" id="forceBarFill" style="height:0%;">
+        <div class="force-bar-shimmer"></div>
+      </div>
+      <div class="force-bar-peak" id="forceBarPeak"></div>
+    </div>
+    <div class="force-bar-val" id="forceBarVal">—</div>
+    <div class="force-bar-unit" id="forceBarUnit">N</div>
+    <div class="force-bar-sub">freq × force<br>= P × A</div>
+  </div>
+
+  <!-- CENTER SIM -->
+  <div class="sim-col">
+    <div class="sim-wrap" id="simWrap">
+      <canvas id="simCanvas"></canvas>
+    </div>
+    <div class="eq-box">
+      <div class="eq-law" id="eqLaw">Boyle's Law</div>
+      <div class="eq-formula" id="eqFormula">P&#8321;V&#8321; = P&#8322;V&#8322;</div>
+      <div class="eq-desc" id="eqDesc">At constant T and n, P and V are inversely proportional.</div>
+    </div>
+  </div>
+
+  <!-- RIGHT DATA -->
+  <div class="panel">
+    <div class="data-panel">
+      <!-- PHASE INDICATOR -->
+      <div class="reading-card" id="phaseCard">
+        <div class="reading-label">Current Phase</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div class="reading-value" id="phaseVal" style="font-size:1.05rem;">Gas</div>
+          <div style="font-size:.65rem;color:var(--muted);text-align:right;line-height:1.4;" id="phaseTemp">—</div>
+        </div>
+        <div style="font-size:.65rem;color:var(--muted);margin-top:4px;line-height:1.45;" id="phaseDesc">—</div>
+      </div>
+
+      <!-- CRITICAL TEMPERATURE PANEL -->
+      <div class="tc-card" id="tcCard">
+        <div class="reading-label" style="margin-bottom:7px;">Critical Temperature</div>
+        <div class="tc-row">
+          <span class="tc-label">Current T</span>
+          <span class="tc-val" id="tcCurrentT" style="color:var(--accent2)">— K</span>
+        </div>
+        <div class="tc-row">
+          <span class="tc-label">Critical T<sub>c</sub></span>
+          <span class="tc-val" id="tcCritT" style="color:var(--purple)">— K</span>
+        </div>
+        <!-- Temperature bar: shows T relative to Tc -->
+        <div class="tc-bar-wrap">
+          <div class="tc-bar-fill" id="tcBarFill" style="width:0%"></div>
+          <div class="tc-bar-marker" id="tcBarMarker" style="left:100%"></div>
+        </div>
+        <div class="tc-bar-labels">
+          <span>0 K</span>
+          <span id="tcBarMidLabel"></span>
+          <span id="tcBarMaxLabel"></span>
+        </div>
+        <div class="tc-phase-row">
+          <span class="tc-label">Can liquefy?</span>
+          <span class="tc-val" id="tcCanLiquefy" style="font-size:.75rem;">—</span>
+        </div>
+      </div>
+
+      <!-- SUPERCRITICAL WARNING -->
+      <div class="sc-warning" id="scWarning">
+        <div class="sc-warning-title">⚠️ Above Critical Temperature</div>
+        <div class="sc-warning-body" id="scWarningBody">This gas is above its critical temperature and cannot be liquefied by pressure alone. No matter how much pressure is applied, it will remain a gas (or supercritical fluid).</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        <div class="reading-card">
+          <div class="reading-label">Pressure</div>
+          <div class="reading-value blue" id="rP">1.000</div>
+          <div style="font-size:.58rem;color:var(--muted)">atm</div>
+        </div>
+        <div class="reading-card">
+          <div class="reading-label">Temperature</div>
+          <div class="reading-value red" id="rT">273 K</div>
+          <div style="font-size:.58rem;color:var(--muted)" id="rTc">0.0 &deg;C</div>
+        </div>
+        <div class="reading-card">
+          <div class="reading-label">Volume</div>
+          <div class="reading-value green" id="rV">22.40</div>
+          <div style="font-size:.58rem;color:var(--muted)">L</div>
+        </div>
+        <div class="reading-card">
+          <div class="reading-label">Moles</div>
+          <div class="reading-value yellow" id="rN">1.000</div>
+          <div style="font-size:.58rem;color:var(--muted)">mol</div>
+        </div>
+      </div>
+      <!-- Molecule count — full width, shown always -->
+      <div class="reading-card" style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;gap:6px;">
+        <div>
+          <div class="reading-label" style="margin-bottom:2px;">Gas Molecules  <span style="color:var(--muted);font-size:.62rem">(N = n × Nₐ)</span></div>
+          <div style="font-size:.58rem;color:var(--muted)">6.022 × 10²³ per mol</div>
+        </div>
+        <div style="text-align:right">
+          <div class="reading-value" style="color:#c97bff;font-size:1.05rem;letter-spacing:.02em;" id="rMolecules">6.022 × 10²³</div>
+          <div style="font-size:.58rem;color:var(--muted)">molecules</div>
+        </div>
+      </div>
+
+      <!-- Z GAUGE -->
+      <div class="z-card">
+        <div class="z-top">
+          <span class="z-label">Compressibility Z = PV/nRT</span>
+          <span class="z-value" id="zVal">1.000</span>
+        </div>
+        <div class="z-gauge-wrap">
+          <div class="z-gauge-track"></div>
+          <div class="z-needle" id="zNeedle" style="left:50%"></div>
+        </div>
+        <div class="z-scale">
+          <span>0.5<br>attract</span>
+          <span style="text-align:center">1.0<br>ideal</span>
+          <span style="text-align:right">1.5<br>repel</span>
+        </div>
+        <div class="z-badge ideal" id="zBadge">Ideal behavior — Z = 1</div>
+      </div>
+
+      <!-- DEVIATION CARD (real mode only) -->
+      <div class="dev-card" id="devCard">
+        <div class="dev-row">
+          <span class="dev-label">Ideal P = nRT/V</span>
+          <span class="dev-val" id="devIdeal" style="color:var(--ideal)">---</span>
+        </div>
+        <div class="dev-row">
+          <span class="dev-label">Real P (van der Waals)</span>
+          <span class="dev-val" id="devReal" style="color:var(--real)">---</span>
+        </div>
+        <div class="dev-row">
+          <span class="dev-label">Deviation (Real − Ideal)</span>
+          <span class="dev-val" id="devDelta">---</span>
+        </div>
+        <div class="dev-explain" id="devExplain">—</div>
+      </div>
+
+      <!-- KINETICS CARD -->
+      <div class="kinetics-card" id="kineticsCard">
+        <div class="reading-label" style="margin-bottom:6px;">Molecular Kinetics</div>
+        <div class="kinetics-header">
+          <div></div>
+          <div class="kinetics-col-lbl">Wall Coll.<br>/sec</div>
+          <div class="kinetics-col-lbl">Mol. Coll.<br>/sec</div>
+          <div class="kinetics-col-lbl">Avg Speed<br>m/s</div>
+        </div>
+        <div id="kineticsRows">—</div>
+        <div class="kinetics-note" id="kineticsNote">Mol. collisions &amp; wall force in Real Gas mode only</div>
+        <div id="kineticsForce" style="margin-top:6px;"></div>
+      </div>
+
+      <!-- GRAPH -->
+      <div class="graph-card">
+        <div class="graph-header">
+          <div class="graph-title" id="graphTitle">P vs V</div>
+          <div class="graph-legend">
+            <div class="graph-legend-item"><div class="graph-legend-line" style="background:var(--ideal)"></div>Ideal</div>
+            <div class="graph-legend-item" id="realLegendItem"><div class="graph-legend-line" style="background:var(--real)"></div>Real</div>
+          </div>
+        </div>
+        <canvas id="graphCanvas" height="155"></canvas>
+      </div>
+
+      <!-- GRAHAM RESULT -->
+      <div class="graham-result" id="grahamResult">
+        <div class="reading-label">Graham's Effusion Ratio r&#8321;/r&#8322;</div>
+        <div class="reading-value yellow" id="rGraham">---</div>
+        <div style="font-size:.65rem;color:var(--muted);margin-top:3px;">r&#8321;/r&#8322; = &#8730;(M&#8322;/M&#8321;) — lighter gas effuses faster</div>
+      </div>
+
+      <!-- LAW INFO -->
+      <div class="law-card">
+        <h3 id="lawInfoTitle">Boyle's Law</h3>
+        <p id="lawInfoText">Named after Robert Boyle (1662). Squeeze the volume and pressure rises. PV stays constant at fixed T and n.</p>
+      </div>
+    </div>
+  </div>
+
+
+</div><!-- .main -->
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CONSTANTS & DATA
+// ═══════════════════════════════════════════════════════════════
+const R_CONST = 0.08206;
+const R_SI = 8.314; // J/(mol·K)
+
+// ── Collision counters (time-windowed, per gas) ──────────────
+// wall: count, mol: count, impulse: N·s accumulated (for force)
+// windowMs: length of current window in ms, lastFlush: timestamp
+const collCounters = {};
+function ensureCounter(gk){
+  if(!collCounters[gk]) collCounters[gk]={
+    wall:0, mol:0, impulse:0,
+    wallPerSec:0, molPerSec:0, forceAvg:0,
+    lastFlush: performance.now()
+  };
+}
+const WINDOW_MS = 500; // flush every 500 ms → smooth but responsive
+
+const GASES = {
+  H2:  { name:'Hydrogen',       M:2.016,  a:0.244, b:0.0266,  r:3.5, hex:'#4f9eff',
+          melt:14,   boil:20.3, sublime:null,
+          Tc:33.2,   Pc:12.8,
+          dHvap:904,    dTmeltdP:0.0003,
+          desc:'Very light, weak intermolecular forces. Nearly ideal.' },
+  He:  { name:'Helium',         M:4.003,  a:0.034, b:0.0238,  r:3,   hex:'#7dff8a',
+          melt:null, boil:4.2,  sublime:null,
+          Tc:5.2,    Pc:2.27,
+          dHvap:84,     dTmeltdP:null,
+          desc:'Monatomic noble gas. No solid phase at 1 atm — stays liquid/gas to 0 K.' },
+  N2:  { name:'Nitrogen',       M:28.014, a:1.39,  b:0.0391,  r:4,   hex:'#a78bff',
+          melt:63,   boil:77.3, sublime:null,
+          Tc:126.2,  Pc:33.5,
+          dHvap:5570,   dTmeltdP:0.010,
+          desc:'Makes up 78% of air. Moderate deviations at high pressure.' },
+  O2:  { name:'Oxygen',         M:31.998, a:1.36,  b:0.0318,  r:4,   hex:'#ff8c6b',
+          melt:54,   boil:90.2, sublime:null,
+          Tc:154.6,  Pc:49.8,
+          dHvap:6820,   dTmeltdP:0.012,
+          desc:'Similar to N₂. Slight deviations, larger effective size.' },
+  CO2: { name:'Carbon Dioxide', M:44.01,  a:3.59,  b:0.0427,  r:5,   hex:'#ff6b6b',
+          melt:216.6,boil:194.7,sublime:195,
+          Tc:304.2,  Pc:72.8,
+          dHvap:16600,  dTmeltdP:0.016,
+          desc:'Sublimates at 195 K at 1 atm (dry ice!). Above 5.11 atm it has a liquid phase.' },
+  CH4: { name:'Methane',        M:16.043, a:2.253, b:0.0428,  r:4,   hex:'#ffd166',
+          melt:90.7, boil:111.7,sublime:null,
+          Tc:190.6,  Pc:45.4,
+          dHvap:8170,   dTmeltdP:0.008,
+          desc:'Natural gas. Moderate attractions. Clear deviation at high P.' },
+  NH3: { name:'Ammonia',        M:17.031, a:4.169, b:0.0371,  r:4,   hex:'#ff9ef5',
+          melt:195.4,boil:239.7,sublime:null,
+          Tc:405.5,  Pc:111.3,
+          dHvap:23350,  dTmeltdP:0.025,
+          desc:'Polar with H-bonding. Largest a value here — strongest attractions, biggest Z dip.' },
+  Ar:  { name:'Argon',          M:39.948, a:1.355, b:0.0322,  r:4,   hex:'#06d6a0',
+          melt:83.8, boil:87.3, sublime:null,
+          Tc:150.8,  Pc:48.0,
+          dHvap:6520,   dTmeltdP:0.009,
+          desc:'Noble gas, heavier than He. Slightly more deviation than He but still modest.' },
+  H2O: { name:'Water',          M:18.015, a:5.536, b:0.03049, r:4.5, hex:'#38bdf8',
+          melt:273.15,boil:373.15,sublime:null,
+          Tc:647.1,  Pc:217.6,
+          dHvap:40650,  dTmeltdP:0.0075,
+          desc:'Strongest H-bonding of all gases here. Highest a value — huge attractive deviations. Boiling point rises steeply with pressure.' },
+  Ne:  { name:'Neon',           M:20.180, a:0.211, b:0.01709, r:3.2, hex:'#fb923c',
+          melt:24.6, boil:27.1, sublime:null,
+          Tc:44.4,   Pc:26.9,
+          dHvap:1760,   dTmeltdP:0.004,
+          desc:'Noble gas. Very weak forces, tiny b — one of the most ideal-behaving gases. Z ≈ 1 across almost all conditions.' },
+};
+
+const LAWS = {
+  boyle:    { name:"Boyle's Law",       formula:'P\u2081V\u2081 = P\u2082V\u2082',
+              desc:'At constant T and n, P and V are inversely proportional.',
+              info:"Robert Boyle (1662). Squeeze the volume \u2192 pressure rises. PV = constant at fixed T and n.",
+              gx:'V', gy:'P', lockT:true, lockN:true, lockP:false, lockV:false },
+  charles:  { name:"Charles's Law",     formula:'V\u2081/T\u2081 = V\u2082/T\u2082',
+              desc:'At constant P and n, V is directly proportional to T.',
+              info:"Jacques Charles (1787). Heat a gas \u2192 it expands. V/T = constant at fixed P and n. Hot air balloons!",
+              gx:'T', gy:'V', lockP:true, lockN:true, lockT:false, lockV:false },
+  gay:      { name:"Gay-Lussac's Law",  formula:'P\u2081/T\u2081 = P\u2082/T\u2082',
+              desc:'At constant V and n, P is directly proportional to T.',
+              info:"Gay-Lussac (1809). Heat a sealed rigid container \u2192 pressure rises. Why aerosol cans warn \u2018do not incinerate\u2019.",
+              gx:'T', gy:'P', lockV:true, lockN:true, lockT:false, lockP:false },
+  avogadro: { name:"Avogadro's Law",    formula:'V\u2081/n\u2081 = V\u2082/n\u2082',
+              desc:'At constant T and P, V is directly proportional to n.',
+              info:"Avogadro (1811). Add more molecules \u2192 the container expands. 1 mol of any ideal gas = 22.4 L at STP.",
+              gx:'n', gy:'V', lockT:true, lockP:true, lockN:false, lockV:false },
+  graham:   { name:"Graham's Law",      formula:'r\u2081/r\u2082 = \u221a(M\u2082/M\u2081)',
+              desc:'Effusion rate is inversely proportional to \u221a(molar mass).',
+              info:"Thomas Graham (1848). Lighter gases move faster and escape through pinholes more quickly. H\u2082 effuses ~4\xd7 faster than O\u2082.",
+              gx:'M', gy:'rate', lockT:false, lockP:false, lockN:false, lockV:false },
+  combined: { name:'Combined Gas Law',  formula:'P\u2081V\u2081/T\u2081 = P\u2082V\u2082/T\u2082',
+              desc:'All 4 sliders unlocked \u2014 set any conditions and watch how they relate.',
+              info:"Combines Boyle's, Charles's, and Gay-Lussac's. All four sliders are free to explore.",
+              gx:'V', gy:'P', lockT:false, lockP:false, lockN:false, lockV:false },
+  ideal:    { name:'Ideal Gas Law',     formula:'PV = nRT',
+              desc:'All 4 sliders free \u2014 set P, V, T, n independently. Watch Z drift from 1.0 as conditions get extreme.',
+              info:"All four variables are yours to control. Watch the Z-factor: when Z=1, your conditions satisfy PV=nRT exactly. Switch to Real Mode to add van der Waals corrections.",
+              gx:'V', gy:'P', lockT:false, lockP:false, lockN:false, lockV:false },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+const S = {
+  law:'boyle', mode:'ideal', gas:'H2', gas2:'O2',
+  P:1.0, T:273, V:22.4, n:1.0,
+  lockedP:false, lockedT:true, lockedV:false, lockedN:true
+};
+
+// Multi-gas tank: map of gasKey → moles
+const TANK = {};   // e.g. { H2: 1.0, O2: 0.5 }
+
+function tankKeys(){ return Object.keys(TANK); }
+function tankN(){ return Object.values(TANK).reduce((s,v)=>s+v, 0); }
+function primaryGas(){ return tankKeys()[0] || 'H2'; }
+// Keep S.gas and S.n synced to tank for legacy law calculations
+function syncStateFromTank(){
+  const keys = tankKeys();
+  S.gas = primaryGas();
+  S.n   = Math.max(tankN(), 0.1);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+function hex2rgb(hex){ const h=hex.replace('#',''); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; }
+function blendHex(a,b,t){
+  const [ar,ag,ab_]=hex2rgb(a),[br,bg,bb_]=hex2rgb(b);
+  const r=Math.round(ar+(br-ar)*t), g=Math.round(ag+(bg-ag)*t), bl=Math.round(ab_+(bb_-ab_)*t);
+  return '#'+(r<16?'0':'')+r.toString(16)+(g<16?'0':'')+g.toString(16)+(bl<16?'0':'')+bl.toString(16);
+}
+function rgbaS(hex,a){ const[r,g,b]=hex2rgb(hex); return `rgba(${r},${g},${b},${a})`; }
+function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
+
+function vanDerWaals(n, T, V, a, b){
+  const denom = V - n*b;
+  if(denom <= 0.001) return null;
+  return (n*R_CONST*T)/denom - a*n*n/(V*V);
+}
+function idealP(n,T,V){ return n*R_CONST*T/V; }
+
+// ── PHASE LOGIC ──────────────────────────────────────────────────────────────
+// Clausius-Clapeyron: boiling point shifts with pressure.
+// ln(P₂/P₁) = (ΔHvap/R)(1/T₁ − 1/T₂)  →  T_boil(P) = 1/(1/T_b1 − R/ΔHvap·ln(P))
+// ΔHvap in J/mol, T in K, P in atm (reference P1 = 1 atm).
+// Similarly for melting: ΔV_fus is tiny so melt point barely shifts — we use a
+// small linear correction (dTm/dP ≈ 0.01–0.05 K/atm for most substances).
+const R_J = 8.314; // J/(mol·K)
+
+// Returns pressure-corrected boiling temperature (K) for gas gk at pressure P_atm.
+function boilT(gk, P_atm) {
+  const g = GASES[gk];
+  if(!g.boil || !g.dHvap) return g.boil;
+  const Tb1 = g.boil;  // boiling point at 1 atm
+  // Clausius-Clapeyron — capped at Tc so we never extrapolate past critical point
+  const invT = 1/Tb1 - (R_J / g.dHvap) * Math.log(Math.max(P_atm, 0.001));
+  if(invT <= 0) return g.Tc; // above critical pressure range
+  return Math.min(1/invT, g.Tc);
+}
+
+// Returns pressure-corrected melting temperature (K).
+// dTm/dP (K/atm) is gas-specific; small but nonzero and pedagogically relevant.
+function meltT(gk, P_atm) {
+  const g = GASES[gk];
+  if(!g.melt) return null;
+  return g.melt + g.dTmeltdP * (P_atm - 1);
+}
+
+// Returns 'solid' | 'liquid' | 'gas' using pressure-corrected phase boundaries
+function getPhase(gk) {
+  const g = GASES[gk];
+  const T = S.T;
+  const P = S.P;
+
+  // Above critical temperature: cannot liquefy regardless of pressure
+  if(T >= g.Tc) return 'gas';
+
+  // CO2: sublimes at 1 atm. Above its triple-point pressure (5.11 atm) it has
+  // a proper liquid phase; below 5.11 atm it only sublimates.
+  if(g.sublime !== null) {
+    if(P < 5.11) return T < g.sublime ? 'solid' : 'gas'; // no liquid below triple-point P
+    // Above 5.11 atm CO2 has a liquid region — use Clausius-Clapeyron
+    const Tb = boilT(gk, P);
+    const Tm = meltT(gk, P) ?? g.sublime;
+    if(T < Tm)  return 'solid';
+    if(T < Tb)  return 'liquid';
+    return 'gas';
+  }
+
+  // He: no solid phase at accessible pressures — liquid below pressure-adjusted boil
+  if(g.melt === null) return T < boilT(gk, P) ? 'liquid' : 'gas';
+
+  // All others: pressure-aware solid/liquid/gas
+  const Tb = boilT(gk, P);
+  const Tm = meltT(gk, P);
+  if(T < Tm)  return 'solid';
+  if(T < Tb)  return 'liquid';
+  return 'gas';
+}
+
+// Returns true if gas is in supercritical state (T ≥ Tc)
+function isSupercritical(gk) {
+  return S.T >= GASES[gk].Tc;
+}
+
+// Smooth blend factor 0→1 across a transition window
+function phaseBlend(T, lo, hi) {
+  return clamp((T - lo) / Math.max(hi - lo, 1), 0, 1);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BACKGROUND
+// ═══════════════════════════════════════════════════════════════
+function initBG(){
+  const c=document.getElementById('bgCanvas');
+  function draw(){
+    c.width=window.innerWidth; c.height=window.innerHeight;
+    const cx=c.getContext('2d');
+    cx.strokeStyle='rgba(79,158,255,0.04)'; cx.lineWidth=1;
+    for(let x=0;x<c.width;x+=40){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,c.height);cx.stroke();}
+    for(let y=0;y<c.height;y+=40){cx.beginPath();cx.moveTo(0,y);cx.lineTo(c.width,y);cx.stroke();}
+    [{x:.8,y:.05,r:350,c:'rgba(79,158,255,0.07)'},{x:.1,y:.9,r:280,c:'rgba(255,107,107,0.05)'},{x:.5,y:.5,r:200,c:'rgba(125,255,138,0.04)'}].forEach(o=>{
+      const g=cx.createRadialGradient(c.width*o.x,c.height*o.y,0,c.width*o.x,c.height*o.y,o.r);
+      g.addColorStop(0,o.c); g.addColorStop(1,'transparent'); cx.fillStyle=g; cx.fillRect(0,0,c.width,c.height);
+    });
+  }
+  draw(); window.addEventListener('resize',draw);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SIMULATION
+// ═══════════════════════════════════════════════════════════════
+let SIM, CTX, SW=0, SH=0;
+// particleMap: { gasKey: particle[] }
+let particleMap = {};
+// Legacy aliases still used by stepSet / drawParticleSet
+let particles=[], particles2=[];
+
+// Lattice grid positions for solid phase
+function solidLatticePositions(count, b) {
+  const cols = Math.ceil(Math.sqrt(count * b.w / b.h));
+  const rows = Math.ceil(count / cols);
+  const spacingX = b.w / (cols + 1);
+  const spacingY = b.h / (rows + 1);
+  const pos = [];
+  for (let r = 1; r <= rows; r++) for (let c = 1; c <= cols; c++) {
+    if (pos.length < count) pos.push({
+      x: b.left + c * spacingX,
+      y: b.top  + r * spacingY
+    });
+  }
+  return pos;
+}
+
+function initSim(){
+  SIM=document.getElementById('simCanvas');
+  CTX=SIM.getContext('2d');
+  sizeSim();
+  window.addEventListener('resize',sizeSim);
+}
+function sizeSim(){
+  const wrap=document.getElementById('simWrap');
+  SW=SIM.width=wrap.clientWidth;
+  SH=SIM.height=wrap.clientHeight;
+  spawnAll();
+}
+function containerBox(){
+  const logFrac=clamp(Math.log(Math.max(S.V,0.1)/0.1)/Math.log(1000),0,1);
+  const frac=0.18+logFrac*0.70;
+  const W2=Math.min(SW*0.88,Math.max(80,SW*0.88*frac));
+  const H2=Math.min(SH*0.88,Math.max(80,SH*0.88*frac*0.72));
+  return {left:(SW-W2)/2,top:(SH-H2)/2,w:W2,h:H2};
+}
+function baseSpd(gk){ const g=GASES[gk]; return clamp(Math.sqrt(Math.max(S.T,0.001)*0.06/g.M),0.1,6); }
+function spdColor(s){ const t=clamp(s/5,0,1); if(t<0.4)return '#4f9eff'; if(t<0.75)return '#ffd166'; return '#ff6b6b'; }
+
+let _particleIdCounter = 0;
+let _lastPhase = {};   // gk → last known phase, for transition detection
+function makeParticle(gk, b, latticePos) {
+  const g = GASES[gk];
+  const spd = baseSpd(gk) * (0.7 + Math.random()*0.6);
+  const ang = Math.random() * Math.PI * 2;
+  const x = latticePos ? latticePos.x : b.left + g.r + Math.random()*(b.w - g.r*2);
+  const y = latticePos ? latticePos.y : b.top  + g.r + Math.random()*(b.h - g.r*2);
+  return {
+    x, y,
+    vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd,
+    r: g.r, trail: [], ax: 0, ay: 0,
+    homeX: x, homeY: y,
+    vibPhase: Math.random()*Math.PI*2,
+    _id: _particleIdCounter++
+  };
+}
+
+function spawnAll(){
+  const b = containerBox();
+  const keys = tankKeys();
+  if(keys.length === 0){
+    particleMap = {}; particles = []; particles2 = []; return;
+  }
+  const totalN = tankN();
+  const totalParticles = clamp(Math.round(totalN * 38), 12, 110);
+
+  particleMap = {};
+  keys.forEach(gk => {
+    const frac = TANK[gk] / totalN;
+    const cnt = Math.max(1, Math.round(totalParticles * frac));
+    const phase = getPhase(gk);
+    _lastPhase[gk] = phase;   // record current phase so stepParticles won't see a false transition
+    const lpos = phase === 'solid' ? solidLatticePositions(cnt, b) : null;
+    const pts = [];
+    for(let i=0;i<cnt;i++) pts.push(makeParticle(gk, b, lpos ? lpos[i] : null));
+    particleMap[gk] = pts;
+  });
+
+  // Keep legacy particles = all particles combined (for collision etc)
+  particles = Object.values(particleMap).flat();
+
+  // Graham second gas
+  particles2 = [];
+  if(S.law==='graham'){
+    for(let i=0;i<20;i++){
+      const p = makeParticle(S.gas2, b, null);
+      p.x = b.left + b.w*0.45 + Math.random()*b.w*0.5;
+      p.homeX = p.x; p.homeY = p.y;
+      particles2.push(p);
+    }
+  }
+}
+
+let vibTick = 0;
+function stepParticles(){
+  const keys = tankKeys();
+  if(keys.length === 0) return;
+
+  vibTick += 0.06;
+
+  // Check for phase transitions — re-spawn only when a gas actually changes phase
+  let needsRespawn = false;
+  keys.forEach(gk => {
+    const phase = getPhase(gk);
+    if(_lastPhase[gk] !== undefined && _lastPhase[gk] !== phase) needsRespawn = true;
+  });
+  if(needsRespawn){
+    // Update phase record BEFORE spawning so new particles don't trigger another respawn
+    keys.forEach(gk => { _lastPhase[gk] = getPhase(gk); });
+    spawnAll();
+    return;
+  }
+  // Always keep phase record current
+  keys.forEach(gk => { _lastPhase[gk] = getPhase(gk); });
+
+  // Step each gas's particles independently
+  keys.forEach(gk => {
+    const pts = particleMap[gk] || [];
+    if(pts.length > 0) stepSet(pts, gk);
+  });
+
+  if(S.law==='graham') stepSet(particles2, S.gas2);
+
+  // ── Elastic collisions (Real Gas mode) ───────────────────────
+  // All gas-phase particles across all species, with correct mass-weighted impulse.
+  // For two particles of mass m_a, m_b colliding along normal n:
+  //   Δv_a =  2*m_b/(m_a+m_b) * (dv·n) * n
+  //   Δv_b = -2*m_a/(m_a+m_b) * (dv·n) * n
+  // This conserves both momentum and kinetic energy exactly.
+  if(S.mode === 'real'){
+    // Build flat list of gas-phase particles tagged with their species key and mass
+    const allGasPtcs = [];
+    keys.forEach(gk => {
+      if(getPhase(gk) !== 'gas') return;
+      const mSim = GASES[gk].M; // use molar mass as proportional mass (units cancel in ratio)
+      (particleMap[gk]||[]).forEach(p => allGasPtcs.push({p, gk, m: mSim}));
+    });
+
+    for(let i = 0; i < allGasPtcs.length; i++){
+      for(let j = i+1; j < allGasPtcs.length; j++){
+        const {p:a, gk:gkA, m:mA} = allGasPtcs[i];
+        const {p:b2, gk:gkB, m:mB} = allGasPtcs[j];
+        const dx = b2.x-a.x, dy = b2.y-a.y;
+        const d  = Math.sqrt(dx*dx + dy*dy);
+        const md = a.r + b2.r + 1;
+        if(d > 0 && d < md){
+          const nx = dx/d, ny = dy/d;
+          const dvn = (a.vx-b2.vx)*nx + (a.vy-b2.vy)*ny; // relative velocity along normal
+          if(dvn > 0){ // approaching
+            const mTot = mA + mB;
+            const jA =  2*mB/mTot * dvn;
+            const jB =  2*mA/mTot * dvn;
+            a.vx  -= jA*nx;  a.vy  -= jA*ny;
+            b2.vx += jB*nx;  b2.vy += jB*ny;
+            // Count collision for each species involved
+            ensureCounter(gkA); collCounters[gkA].mol++;
+            ensureCounter(gkB); collCounters[gkB].mol++;
+          }
+          // Separate overlapping particles
+          const ov = (md-d)/2;
+          a.x  -= nx*ov; a.y  -= ny*ov;
+          b2.x += nx*ov; b2.y += ny*ov;
+        }
+      }
+    }
+  }
+
+  // Adjust gas-phase particle counts per mole fraction
+  const totalN = tankN();
+  const totalP = clamp(Math.round(totalN * 38), 12, 110);
+  const b = containerBox();
+  keys.forEach(gk => {
+    if(getPhase(gk) !== 'gas') return;
+    const target = Math.max(1, Math.round(totalP * TANK[gk]/totalN));
+    const pts = particleMap[gk] ||= [];
+    while(pts.length < target) pts.push(makeParticle(gk, b, null));
+    while(pts.length > target) pts.pop();
+  });
+
+  // Rebuild flat array for legacy references
+  particles = Object.values(particleMap).flat();
+
+  // Time-windowed collision flush → per-second rates
+  const now = performance.now();
+  keys.forEach(gk => {
+    ensureCounter(gk);
+    const c = collCounters[gk];
+    const elapsed = now - c.lastFlush;
+    if(elapsed >= WINDOW_MS){
+      const sec = elapsed / 1000;
+      c.wallPerSec = c.wall / sec;
+      c.molPerSec  = c.mol  / sec;
+      c.forceAvg   = c.impulse / sec; // F = Δp/Δt (N)
+      c.wall = 0; c.mol = 0; c.impulse = 0;
+      c.lastFlush = now;
+    }
+  });
+
+}
+
+function stepSet(pts, gk){
+  const b = containerBox(), g = GASES[gk];
+  const phase = getPhase(gk);
+
+  // Speed multiplier — approaches 0 near absolute zero
+  const spdMult = clamp(Math.sqrt(Math.max(S.T, 0.001)/273), 0.01, 2);
+
+  // How far into each transition are we? (for smooth blending)
+  const melt   = g.melt   ?? g.boil ?? g.sublime ?? 0;
+  const boil   = g.boil   ?? g.sublime ?? melt;
+  const transW = 8; // K transition window
+  const meltBlend = g.melt   ? phaseBlend(S.T, g.melt  -transW, g.melt  +transW) : (S.T < (g.boil??9999) ? 0 : 1);
+  const boilBlend = g.boil   ? phaseBlend(S.T, g.boil  -transW, g.boil  +transW)
+                   : g.sublime ? phaseBlend(S.T, g.sublime-transW, g.sublime+transW) : 1;
+
+  pts.forEach((p, idx) => {
+    if (phase === 'solid') {
+      // ── SOLID: vibrate in place on lattice ──────────────────
+      // Vibration amplitude scales with T (zero at 0 K)
+      const amp = clamp(S.T / (g.melt ?? g.sublime ?? 50) * p.r * 0.8, 0, p.r*1.2);
+      p.x = p.homeX + Math.sin(vibTick*2.1 + p.vibPhase)       * amp;
+      p.y = p.homeY + Math.cos(vibTick*1.7 + p.vibPhase*1.3)   * amp;
+      p.vx = 0; p.vy = 0;
+      p.trail = []; // no trail for solids
+
+    } else if (phase === 'liquid') {
+      // ── LIQUID: slow wandering, strong cohesion, stays at bottom ────
+      p.trail.push({x:p.x, y:p.y});
+      if(p.trail.length > 4) p.trail.shift();
+
+      // Gravity-like settling to bottom third of container
+      const liquidFloor = b.top + b.h * 0.6;
+      if (p.y < liquidFloor) p.vy += 0.04;
+
+      // Cohesion toward neighbors
+      const aFactor = g.a * 0.008;
+      let fx=0, fy=0;
+      pts.forEach(q => {
+        if(q===p) return;
+        const dx=q.x-p.x, dy=q.y-p.y, d=Math.sqrt(dx*dx+dy*dy);
+        if(d>0 && d<p.r*5){ const f=aFactor/(d+1); fx+=dx/d*f; fy+=dy/d*f; }
+      });
+      p.vx += fx; p.vy += fy;
+
+      // Dampen (liquid viscosity)
+      p.vx *= 0.88; p.vy *= 0.88;
+
+      const liquidSpd = spdMult * 0.35;
+      p.x += p.vx * liquidSpd; p.y += p.vy * liquidSpd;
+
+      // Bounce walls
+      if(p.x-p.r<b.left)     {p.x=b.left+p.r;     p.vx= Math.abs(p.vx)*0.5;}
+      if(p.x+p.r>b.left+b.w) {p.x=b.left+b.w-p.r; p.vx=-Math.abs(p.vx)*0.5;}
+      if(p.y-p.r<b.top)      {p.y=b.top+p.r;       p.vy= Math.abs(p.vy)*0.5;}
+      if(p.y+p.r>b.top+b.h)  {p.y=b.top+b.h-p.r;  p.vy=-Math.abs(p.vy)*0.5;}
+
+    } else {
+      // ── GAS: free kinetic motion ─────────────────────────────
+      p.trail.push({x:p.x, y:p.y});
+      if(p.trail.length > 7) p.trail.shift();
+
+      // Real mode: intermolecular attractions
+      if(S.mode==='real'){
+        const aFactor = g.a * 0.003 * clamp(spdMult, 0.3, 1.0); // scale down at low T so forces don't overwhelm slow particles
+        let fx=0, fy=0;
+        pts.forEach(q => {
+          if(q===p) return;
+          const dx=q.x-p.x, dy=q.y-p.y, d=Math.sqrt(dx*dx+dy*dy);
+          const minD = p.r * 1.5; // never closer than touching
+          if(d > minD && d < p.r*8){
+            const f=aFactor/(d*d+1);
+            fx+=dx/d*f; fy+=dy/d*f;
+          }
+        });
+        p.vx+=fx; p.vy+=fy;
+        const spd=Math.sqrt(p.vx*p.vx+p.vy*p.vy);
+        const maxSpd=baseSpd(gk)*2.5;
+        if(spd>maxSpd){p.vx=p.vx/spd*maxSpd; p.vy=p.vy/spd*maxSpd;}
+      }
+
+      p.x += p.vx * spdMult; p.y += p.vy * spdMult;
+      // Wall bounces — track count and impulse for force calculation
+      // px/frame → m/s: multiply by (metersPerPixel / secondsPerFrame)
+      // metersPerPixel = sqrt(V_m3) / b.w  (2D approximation)
+      // We accumulate impulse in SI-ready units: 2 * (M_g/1000/N_A) * |v_si| per real molecule,
+      // but since sim particles each represent (n_gk/pts.length) moles we use:
+      //   impulse_per_hit = 2 * (M_g/1000) * (TANK[gk]/pts.length) * |v_px| * mPerPx / sPerFrame
+      // where sPerFrame ≈ 1/60. We store unnormalized and divide by window time.
+      {
+        const N_A = 6.022e23;
+        const b2 = containerBox();
+        const mPerPx = Math.sqrt(Math.max(S.V,0.001)*1e-3) / Math.max(b2.w,1);
+        const molsPerParticle = (TANK[gk]||0.001) / Math.max(pts.length,1);
+        const massPerParticle = (GASES[gk].M/1000) * molsPerParticle * N_A; // kg for molsPerParticle×N_A molecules
+        // Actually mass per SIM particle = (M_g/1000) * molsPerParticle (in kg/mol × mol)
+        const mSim = (GASES[gk].M/1000) * molsPerParticle; // kg
+        ensureCounter(gk);
+        const c2 = collCounters[gk];
+        if(p.x-p.r<b.left)     {p.x=b.left+p.r;     const vp=Math.abs(p.vx); p.vx= vp; c2.wall++; c2.impulse+=2*mSim*vp*mPerPx*60; scheduleClick(vp*spdMult);}
+        if(p.x+p.r>b.left+b.w) {p.x=b.left+b.w-p.r; const vp=Math.abs(p.vx); p.vx=-vp; c2.wall++; c2.impulse+=2*mSim*vp*mPerPx*60; scheduleClick(vp*spdMult);}
+        if(p.y-p.r<b.top)      {p.y=b.top+p.r;       const vp=Math.abs(p.vy); p.vy= vp; c2.wall++; c2.impulse+=2*mSim*vp*mPerPx*60; scheduleClick(vp*spdMult);}
+        if(p.y+p.r>b.top+b.h)  {p.y=b.top+b.h-p.r;  const vp=Math.abs(p.vy); p.vy=-vp; c2.wall++; c2.impulse+=2*mSim*vp*mPerPx*60; scheduleClick(vp*spdMult);}
+        // Hard clamp — guarantees no particle can escape even at extreme velocities
+        p.x = clamp(p.x, b.left+p.r, b.left+b.w-p.r);
+        p.y = clamp(p.y, b.top+p.r,  b.top+b.h-p.r);
+        // NaN guard — reset runaway particles to center with random velocity
+        if(!isFinite(p.x)||!isFinite(p.y)||!isFinite(p.vx)||!isFinite(p.vy)){
+          p.x=b.left+b.w/2; p.y=b.top+b.h/2;
+          const ang=Math.random()*Math.PI*2, spd2=baseSpd(gk);
+          p.vx=Math.cos(ang)*spd2; p.vy=Math.sin(ang)*spd2;
+        }
+      }
+
+      // Elastic collisions handled in unified cross-species pass in stepParticles
+    }
+  });
+}
+
+
+function drawParticleSet(pts, gk){
+  const gd = GASES[gk];
+  const phase = getPhase(gk);
+  const spdMult = clamp(Math.sqrt(Math.max(S.T,0.001)/273), 0.01, 2);
+  const Z = S.T > 0 ? (S.P*S.V)/(S.n*R_CONST*S.T) : 1;
+  const isAttracting = S.mode==='real' && Z<0.97 && phase==='gas';
+  const isRepelling  = S.mode==='real' && Z>1.03  && phase==='gas';
+
+  // Phase-dependent visual parameters
+  const meltT  = gd.melt ?? gd.sublime ?? 999;
+  const boilT  = gd.boil ?? gd.sublime ?? 999;
+  const subT   = gd.sublime ?? 999;
+
+  pts.forEach(p => {
+    const [hr,hg,hb] = hex2rgb(gd.hex);
+
+    if(phase === 'solid') {
+      // ── SOLID: faceted crystal look ──────────────────────────
+      // Vibration intensity → color warmth (bluish-white when cold, warmer near melt)
+      const coldness = 1 - clamp(S.T / meltT, 0, 1);
+      const coreR = Math.round(hr * 0.5 + 180 * coldness);
+      const coreG = Math.round(hg * 0.5 + 200 * coldness);
+      const coreB = Math.round(hb * 0.7 + 255 * coldness);
+      const coreCol = `rgb(${clamp(coreR,0,255)},${clamp(coreG,0,255)},${clamp(coreB,0,255)})`;
+
+      // Outer facet glow (icy)
+      const grd=CTX.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*2.2);
+      grd.addColorStop(0,`rgba(${clamp(coreR,0,255)},${clamp(coreG,0,255)},${clamp(coreB,0,255)},0.5)`);
+      grd.addColorStop(1,'transparent');
+      CTX.beginPath(); CTX.arc(p.x,p.y,p.r*2.2,0,Math.PI*2);
+      CTX.fillStyle=grd; CTX.fill();
+
+      // Draw hexagonal crystal facet
+      CTX.save();
+      CTX.translate(p.x, p.y);
+      CTX.rotate(vibTick * 0.2 + p.vibPhase);
+      CTX.beginPath();
+      for(let i=0;i<6;i++){
+        const a = (i/6)*Math.PI*2;
+        i===0 ? CTX.moveTo(Math.cos(a)*p.r, Math.sin(a)*p.r)
+              : CTX.lineTo(Math.cos(a)*p.r, Math.sin(a)*p.r);
+      }
+      CTX.closePath();
+      CTX.fillStyle = coreCol;
+      CTX.fill();
+      CTX.strokeStyle = `rgba(${clamp(coreR+40,0,255)},${clamp(coreG+40,0,255)},255,0.8)`;
+      CTX.lineWidth = 0.8;
+      CTX.stroke();
+      CTX.restore();
+
+      // Inner highlight
+      CTX.beginPath(); CTX.arc(p.x-p.r*0.25, p.y-p.r*0.25, p.r*0.3, 0, Math.PI*2);
+      CTX.fillStyle='rgba(255,255,255,0.7)'; CTX.fill();
+
+      // Lattice bond lines to neighbors
+      pts.forEach(q => {
+        if(q===p) return;
+        const dx=q.x-p.x, dy=q.y-p.y, d=Math.sqrt(dx*dx+dy*dy);
+        if(d>0 && d<p.r*5.5){
+          const alpha = clamp((1 - d/(p.r*5.5))*0.4, 0, 0.4);
+          CTX.beginPath(); CTX.moveTo(p.x,p.y); CTX.lineTo(q.x,q.y);
+          CTX.strokeStyle=`rgba(${clamp(coreR,0,255)},${clamp(coreG,0,255)},255,${alpha})`;
+          CTX.lineWidth=0.7; CTX.stroke();
+        }
+      });
+
+    } else if(phase === 'liquid') {
+      // ── LIQUID: soft blobby droplets, semi-transparent ───────
+      const warmth = phaseBlend(S.T, meltT, boilT);
+      const liqR = Math.round(hr * (0.6 + warmth*0.4));
+      const liqG = Math.round(hg * (0.6 + warmth*0.4));
+      const liqB = Math.round(hb * (0.6 + warmth*0.4));
+
+      // Soft glow
+      const grd=CTX.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*2.8);
+      grd.addColorStop(0,`rgba(${liqR},${liqG},${liqB},0.55)`);
+      grd.addColorStop(0.5,`rgba(${liqR},${liqG},${liqB},0.2)`);
+      grd.addColorStop(1,'transparent');
+      CTX.beginPath(); CTX.arc(p.x,p.y,p.r*2.8,0,Math.PI*2);
+      CTX.fillStyle=grd; CTX.fill();
+
+      // Slightly squished circle (liquid surface tension effect)
+      CTX.save();
+      CTX.translate(p.x, p.y);
+      CTX.scale(1.1, 0.92); // slightly squished
+      CTX.beginPath(); CTX.arc(0,0,p.r,0,Math.PI*2);
+      CTX.fillStyle=`rgba(${liqR},${liqG},${liqB},0.85)`;
+      CTX.fill();
+      CTX.restore();
+
+      // Sheen
+      CTX.beginPath(); CTX.arc(p.x-p.r*0.28, p.y-p.r*0.28, p.r*0.42, 0, Math.PI*2);
+      CTX.fillStyle='rgba(255,255,255,0.45)'; CTX.fill();
+
+      // Surface tension bonds between close liquid molecules
+      pts.forEach(q => {
+        if(q===p) return;
+        const dx=q.x-p.x, dy=q.y-p.y, d=Math.sqrt(dx*dx+dy*dy);
+        if(d > 0 && d < p.r*3.5){
+          const alpha = clamp((1-d/(p.r*3.5))*0.25, 0, 0.25);
+          CTX.beginPath(); CTX.moveTo(p.x,p.y); CTX.lineTo(q.x,q.y);
+          CTX.strokeStyle=`rgba(${liqR},${liqG},${liqB},${alpha})`;
+          CTX.lineWidth=1.5; CTX.stroke();
+        }
+      });
+
+    } else {
+      // ── GAS: free kinetic motion ─────────────────────────────
+      const spd = Math.sqrt(p.vx*p.vx+p.vy*p.vy)*spdMult;
+      const isMix = tankKeys().length > 1;
+
+      // In real mode: colour particles by their interaction state
+      // Attracting → warm gold/amber; Repelling → hot red; neutral → speed colour
+      let col;
+      if(isMix){
+        col = gd.hex;
+      } else if(isAttracting){
+        // Blend from speed colour toward gold based on 'a' strength
+        const aStrength = clamp(gd.a / 5, 0, 1);  // NH₃ a=4.17 → near 1
+        col = blendHex(spdColor(spd), '#ffaa00', aStrength * 0.75);
+      } else if(isRepelling){
+        col = blendHex(spdColor(spd), '#ff3333', 0.6);
+      } else {
+        col = isMix ? gd.hex : spdColor(spd);
+      }
+      const [pr,pg,pb]=hex2rgb(col);
+
+      // ── ATTRACTION VISUALS (real mode, Z < 1) ────────────────
+      if(isAttracting && !isMix){
+        const aStrength = clamp(gd.a / 5, 0, 1);
+        const pulsePhase = (vibTick * 0.04) % (Math.PI * 2);  // slow pulse
+
+        pts.forEach(q=>{
+          if(q===p || q._id <= p._id) return;  // draw each pair once
+          const dx=q.x-p.x, dy=q.y-p.y, d=Math.sqrt(dx*dx+dy*dy);
+          const maxDist = p.r * 10;
+          if(d <= 0 || d > maxDist) return;
+
+          const proximity = 1 - d/maxDist;           // 1=close, 0=far
+          const lineAlpha = proximity * proximity * aStrength * 0.7;
+          const pulse = 0.6 + 0.4 * Math.sin(pulsePhase + d * 0.05);
+
+          // Dashed attraction line — amber/gold
+          CTX.save();
+          CTX.setLineDash([3, 4]);
+          CTX.lineDashOffset = -(vibTick * 0.5 % 7);  // animated dash marching inward
+          CTX.strokeStyle = `rgba(255,175,30,${lineAlpha * pulse})`;
+          CTX.lineWidth = 1.2 + proximity * 1.5;
+          CTX.beginPath(); CTX.moveTo(p.x,p.y); CTX.lineTo(q.x,q.y);
+          CTX.stroke();
+          CTX.setLineDash([]);
+          CTX.restore();
+
+          // Chevron arrows pointing inward (attraction direction) at midpoint
+          if(proximity > 0.45 && aStrength > 0.2){
+            const mx2 = (p.x+q.x)/2, my2 = (p.y+q.y)/2;
+            const ang = Math.atan2(dy,dx);
+            const arrowAlpha = proximity * aStrength * 0.9 * pulse;
+            CTX.save();
+            CTX.translate(mx2, my2);
+            CTX.rotate(ang);
+            // Two small arrowheads pointing toward each other
+            CTX.strokeStyle = `rgba(255,200,50,${arrowAlpha})`;
+            CTX.lineWidth = 1.5;
+            const as = 4 + proximity * 4;  // arrow size
+            CTX.beginPath();
+            CTX.moveTo( as, -as*0.5); CTX.lineTo(0,0); CTX.lineTo( as,  as*0.5);
+            CTX.moveTo(-as, -as*0.5); CTX.lineTo(0,0); CTX.lineTo(-as,  as*0.5);
+            CTX.stroke();
+            CTX.restore();
+          }
+        });
+
+        // Attraction aura — soft amber halo that pulses
+        const auraR = p.r * (3.5 + 1.5 * Math.sin(pulsePhase));
+        const auraAlpha = aStrength * 0.25;
+        const aura = CTX.createRadialGradient(p.x,p.y, p.r*0.8, p.x,p.y, auraR);
+        aura.addColorStop(0, `rgba(255,170,0,${auraAlpha})`);
+        aura.addColorStop(1, 'transparent');
+        CTX.beginPath(); CTX.arc(p.x,p.y, auraR, 0, Math.PI*2);
+        CTX.fillStyle=aura; CTX.fill();
+      }
+
+      // ── REPULSION VISUALS (real mode, Z > 1) ─────────────────
+      if(isRepelling && !isMix){
+        const pulsePhase = (vibTick * 0.07) % (Math.PI * 2);
+
+        pts.forEach(q=>{
+          if(q===p || q._id <= p._id) return;
+          const dx=q.x-p.x, dy=q.y-p.y, d=Math.sqrt(dx*dx+dy*dy);
+          const maxDist = p.r * 7;
+          if(d <= 0 || d > maxDist) return;
+
+          const proximity = 1 - d/maxDist;
+
+          // Repulsion shock arc — red/orange expanding ring between particles
+          const lineAlpha = proximity * proximity * 0.65;
+          CTX.save();
+          CTX.setLineDash([2,3]);
+          CTX.lineDashOffset = vibTick * 0.8 % 5;   // dashes march OUTWARD
+          CTX.strokeStyle = `rgba(255,80,60,${lineAlpha})`;
+          CTX.lineWidth = 1.0 + proximity * 2;
+          CTX.beginPath(); CTX.moveTo(p.x,p.y); CTX.lineTo(q.x,q.y);
+          CTX.stroke();
+          CTX.setLineDash([]);
+          CTX.restore();
+
+          // Outward-pointing arrows at midpoint
+          if(proximity > 0.5){
+            const mx2=(p.x+q.x)/2, my2=(p.y+q.y)/2;
+            const ang=Math.atan2(dy,dx);
+            const arrowAlpha=proximity*0.9;
+            const as = 4 + proximity*4;
+            CTX.save();
+            CTX.translate(mx2,my2);
+            CTX.rotate(ang);
+            CTX.strokeStyle=`rgba(255,100,60,${arrowAlpha})`;
+            CTX.lineWidth=1.5;
+            // Arrows pointing AWAY from each other
+            CTX.beginPath();
+            CTX.moveTo(-as*0.3,-as*0.5); CTX.lineTo(-as-as*0.3,0); CTX.lineTo(-as*0.3, as*0.5);
+            CTX.moveTo( as*0.3,-as*0.5); CTX.lineTo( as+as*0.3,0); CTX.lineTo( as*0.3, as*0.5);
+            CTX.stroke();
+            CTX.restore();
+          }
+        });
+
+        // Repulsion shock ring — expanding concentric circles
+        const ringR1 = p.r * (2 + (vibTick*0.06 % 2));
+        const ringR2 = p.r * (2 + ((vibTick*0.06 + 1) % 2));
+        [ringR1, ringR2].forEach(rr => {
+          const ringAlpha = 0.35 * (1 - (rr - p.r*2)/(p.r*2));
+          CTX.beginPath(); CTX.arc(p.x,p.y,rr,0,Math.PI*2);
+          CTX.strokeStyle=`rgba(255,80,40,${Math.max(0,ringAlpha)})`;
+          CTX.lineWidth=1; CTX.stroke();
+        });
+
+        // Red aura
+        const aura=CTX.createRadialGradient(p.x,p.y,p.r,p.x,p.y,p.r*3.5);
+        aura.addColorStop(0,'rgba(255,60,40,0.2)'); aura.addColorStop(1,'transparent');
+        CTX.beginPath(); CTX.arc(p.x,p.y,p.r*3.5,0,Math.PI*2);
+        CTX.fillStyle=aura; CTX.fill();
+      }
+
+      // Trail
+      if(p.trail.length>1){
+        CTX.beginPath(); CTX.moveTo(p.trail[0].x,p.trail[0].y);
+        for(let i=1;i<p.trail.length;i++) CTX.lineTo(p.trail[i].x,p.trail[i].y);
+        CTX.strokeStyle=`rgba(${pr},${pg},${pb},0.15)`;
+        CTX.lineWidth=1.2; CTX.stroke();
+      }
+
+      // Glow
+      const grd=CTX.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*3);
+      grd.addColorStop(0,`rgba(${pr},${pg},${pb},0.45)`);
+      grd.addColorStop(1,'transparent');
+      CTX.beginPath(); CTX.arc(p.x,p.y,p.r*3,0,Math.PI*2); CTX.fillStyle=grd; CTX.fill();
+      // Core
+      CTX.beginPath(); CTX.arc(p.x,p.y,p.r,0,Math.PI*2); CTX.fillStyle=col; CTX.fill();
+      // Specular
+      CTX.beginPath(); CTX.arc(p.x-p.r*0.3,p.y-p.r*0.3,p.r*0.32,0,Math.PI*2);
+      CTX.fillStyle='rgba(255,255,255,0.22)'; CTX.fill();
+    }
+  });
+}
+
+function drawSim(){
+  CTX.clearRect(0,0,SW,SH);
+  const b=containerBox(), gh=GASES[S.gas].hex, [gr,gg2,gb]=hex2rgb(gh), dep=18;
+  const phase = getPhase(S.gas);
+
+  // Mode tint on container border
+  const borderHex = S.mode==='real' ? '#ff6b6b' : '#4f9eff';
+  const [br,bg2,bb2]=hex2rgb(borderHex);
+
+  // Top 3D face
+  CTX.fillStyle=`rgba(${br},${bg2},${bb2},0.15)`;
+  CTX.beginPath(); CTX.moveTo(b.left,b.top); CTX.lineTo(b.left+dep,b.top-dep);
+  CTX.lineTo(b.left+b.w+dep,b.top-dep); CTX.lineTo(b.left+b.w,b.top); CTX.closePath(); CTX.fill();
+  // Right 3D face
+  CTX.fillStyle=`rgba(${br},${bg2},${bb2},0.10)`;
+  CTX.beginPath(); CTX.moveTo(b.left+b.w,b.top); CTX.lineTo(b.left+b.w+dep,b.top-dep);
+  CTX.lineTo(b.left+b.w+dep,b.top+b.h-dep); CTX.lineTo(b.left+b.w,b.top+b.h); CTX.closePath(); CTX.fill();
+
+  // Phase-tinted container fill
+  let phaseFillColor;
+  if(phase==='solid')  phaseFillColor=`rgba(180,220,255,0.07)`;
+  else if(phase==='liquid') phaseFillColor=`rgba(${gr},${gg2},${gb},0.12)`;
+  else phaseFillColor=`rgba(${gr},${gg2},${gb},${0.05+clamp(S.P/10*0.08,0,0.1)})`;
+  CTX.fillStyle=phaseFillColor; CTX.fillRect(b.left,b.top,b.w,b.h);
+
+  // For liquid: draw a filled pool at the bottom
+  if(phase==='liquid'){
+    const poolH = b.h * 0.45;
+    const poolGrad = CTX.createLinearGradient(b.left,b.top+b.h-poolH,b.left,b.top+b.h);
+    poolGrad.addColorStop(0,`rgba(${gr},${gg2},${gb},0.18)`);
+    poolGrad.addColorStop(1,`rgba(${gr},${gg2},${gb},0.38)`);
+    CTX.fillStyle=poolGrad;
+    CTX.fillRect(b.left, b.top+b.h-poolH, b.w, poolH);
+    // Liquid surface ripple line
+    CTX.strokeStyle=`rgba(${gr},${gg2},${gb},0.5)`;
+    CTX.lineWidth=1;
+    CTX.setLineDash([4,4]);
+    CTX.beginPath();
+    CTX.moveTo(b.left, b.top+b.h-poolH);
+    CTX.lineTo(b.left+b.w, b.top+b.h-poolH);
+    CTX.stroke();
+    CTX.setLineDash([]);
+  }
+
+  // Radial inner glow
+  const rg=CTX.createRadialGradient(b.left+b.w/2,b.top+b.h/2,0,b.left+b.w/2,b.top+b.h/2,Math.max(b.w,b.h)*0.6);
+  rg.addColorStop(0,`rgba(${gr},${gg2},${gb},0.06)`); rg.addColorStop(1,'transparent');
+  CTX.fillStyle=rg; CTX.fillRect(b.left,b.top,b.w,b.h);
+
+  // Border
+  CTX.strokeStyle=`rgba(${br},${bg2},${bb2},0.7)`; CTX.lineWidth=1.5; CTX.strokeRect(b.left,b.top,b.w,b.h);
+  // 3D edges
+  CTX.strokeStyle=`rgba(${br},${bg2},${bb2},0.3)`; CTX.lineWidth=1;
+  [[b.left,b.top],[b.left+b.w,b.top],[b.left+b.w,b.top+b.h],[b.left,b.top+b.h]].forEach(([x,y])=>{
+    CTX.beginPath(); CTX.moveTo(x,y); CTX.lineTo(x+dep,y-dep); CTX.stroke();
+  });
+  // High pressure flash
+  if(S.P>10){ const pi=clamp((S.P-10)/90,0,1); CTX.strokeStyle=`rgba(255,107,107,${pi*0.55})`; CTX.lineWidth=4+pi*5; CTX.strokeRect(b.left,b.top,b.w,b.h); }
+  // Real mode tint
+  if(S.mode==='real'){ CTX.fillStyle='rgba(255,107,107,0.03)'; CTX.fillRect(b.left,b.top,b.w,b.h); }
+
+  // Draw particles (clipped) — one set per gas in tank
+  CTX.save(); CTX.beginPath(); CTX.rect(b.left,b.top,b.w,b.h); CTX.clip();
+  tankKeys().forEach(gk => {
+    const pts = particleMap[gk] || [];
+    if(pts.length > 0) drawParticleSet(pts, gk);
+  });
+  if(S.law==='graham') drawParticleSet(particles2, S.gas2);
+  // Heat haze (gas phase only)
+  if(phase==='gas' && S.T>500){
+    const ti=clamp((S.T-500)/235,0,1);
+    const hz=CTX.createLinearGradient(b.left,b.top+b.h,b.left,b.top);
+    hz.addColorStop(0,`rgba(255,107,107,${ti*0.07})`); hz.addColorStop(1,'transparent');
+    CTX.fillStyle=hz; CTX.fillRect(b.left,b.top,b.w,b.h);
+  }
+  CTX.restore();
+}
+
+
+
+// ═══════════════════════════════════════════════════════════════
+// GRAPH — dual ideal + real curves
+// ═══════════════════════════════════════════════════════════════
+function drawGraph(){
+  const GC=document.getElementById('graphCanvas');
+  const wrap=GC.parentElement;
+  const GW=GC.width=wrap.clientWidth-20;
+  const GH=GC.height=155;
+  const g=GC.getContext('2d');
+  g.clearRect(0,0,GW,GH);
+
+  const PAD={l:36,r:12,t:10,b:26};
+  const pw=GW-PAD.l-PAD.r, ph=GH-PAD.t-PAD.b;
+
+  // BG
+  g.fillStyle='rgba(5,10,20,0.5)'; g.fillRect(PAD.l,PAD.t,pw,ph);
+  // Grid
+  g.strokeStyle='rgba(255,255,255,0.04)'; g.lineWidth=1;
+  for(let i=1;i<4;i++){
+    g.beginPath();g.moveTo(PAD.l+pw*i/4,PAD.t);g.lineTo(PAD.l+pw*i/4,PAD.t+ph);g.stroke();
+    g.beginPath();g.moveTo(PAD.l,PAD.t+ph*i/4);g.lineTo(PAD.l+pw,PAD.t+ph*i/4);g.stroke();
+  }
+  // Axes
+  g.strokeStyle='rgba(255,255,255,0.2)'; g.lineWidth=1.5;
+  g.beginPath();g.moveTo(PAD.l,PAD.t);g.lineTo(PAD.l,PAD.t+ph);g.lineTo(PAD.l+pw,PAD.t+ph);g.stroke();
+
+  const STEPS=80;
+  const gd=GASES[S.gas];
+  let idealPts=[], realPts=[];
+  let markerXi,markerYi,markerXr,markerYr;
+
+  function buildPVcurves(){
+    // For Boyle's Law: show P range 1–10 atm for a clean hyperbola shape.
+    // Derive V range from PV = nRT = k, so V = k/P.
+    const k = S.n * R_CONST * S.T;  // PV constant at this T
+    const isBoylesView = S.law === 'boyle';
+    const Pmin = isBoylesView ? 0.5  : 0.1;
+    const Pmax = isBoylesView ? 10.0 : Math.max(S.P * 2, 20);
+    // Map V range: from V at Pmax to V at Pmin, so X axis = Volume increases left→right
+    const Vmin = isBoylesView ? Math.max(k / Pmax, 0.1) : 0.1;
+    const Vmax = isBoylesView ? Math.min(k / Pmin, 100) : 100;
+    for(let i=0;i<=STEPS;i++){
+      const Vv = Vmin + (i/STEPS)*(Vmax-Vmin);
+      const ip = idealP(S.n, S.T, Vv);
+      if(ip > 0 && ip <= Pmax * 1.1) idealPts.push([Vv, ip]);
+      const rp = vanDerWaals(S.n, S.T, Vv, gd.a, gd.b);
+      if(rp !== null && rp > 0 && rp <= Pmax * 1.1) realPts.push([Vv, rp]);
+    }
+    // Y axis: always 0 → Pmax for Boyle's, or data-driven otherwise
+    const allP = [...idealPts.map(p=>p[1]),...realPts.map(p=>p[1])].filter(p=>p>0);
+    const maxP = isBoylesView ? Pmax : Math.max(...allP, S.P*1.1, 1)*1.05;
+    const mx=v=>PAD.l+(v-Vmin)/(Vmax-Vmin)*pw;
+    const my=p=>PAD.t+ph-clamp(p,0,maxP)/maxP*ph;
+    markerXi=mx(clamp(S.V,Vmin,Vmax)); markerYi=my(idealP(S.n,S.T,S.V));
+    const rp=vanDerWaals(S.n,S.T,S.V,gd.a,gd.b);
+    if(rp!==null&&rp>0){markerXr=mx(clamp(S.V,Vmin,Vmax));markerYr=my(rp);}
+    return{mx,my,maxP,xLabel:'Volume (L)',yLabel:'P (atm)'};
+  }
+
+  function buildVTcurves(){
+    const Tmin=0,Tmax=735;
+    for(let i=0;i<=STEPS;i++){
+      const Tv=Tmin+(i/STEPS)*(Tmax-Tmin);
+      const Vv_ideal=S.n*R_CONST*Math.max(Tv,0.001)/S.P;
+      idealPts.push([Tv, Vv_ideal]);
+      const Vv_real=Vv_ideal*(1 - gd.a*S.n/(R_CONST*Math.max(Tv,0.001)*Vv_ideal) + gd.b*S.P/(R_CONST*Math.max(Tv,0.001)));
+      realPts.push([Tv, Vv_real]);
+    }
+    const maxV=Math.max(...idealPts.map(p=>p[1]))*1.1;
+    const mx=t=>PAD.l+(t-Tmin)/(Tmax-Tmin)*pw;
+    const my=v=>PAD.t+ph-clamp(v,0,maxV)/maxV*ph;
+    markerXi=mx(S.T); markerYi=my(S.n*R_CONST*Math.max(S.T,0.001)/S.P);
+    const Vr=S.n*R_CONST*Math.max(S.T,0.001)/S.P*(1-gd.a*S.n/(R_CONST*Math.max(S.T,0.001)*S.V)+gd.b*S.P/(R_CONST*Math.max(S.T,0.001)));
+    markerXr=mx(S.T); markerYr=my(Vr);
+    return{mx,my,xLabel:'Temperature (K)',yLabel:'V (L)'};
+  }
+
+  function buildPTcurves(){
+    const Tmin=0,Tmax=735;
+    for(let i=0;i<=STEPS;i++){
+      const Tv=Tmin+(i/STEPS)*(Tmax-Tmin);
+      idealPts.push([Tv, S.n*R_CONST*Math.max(Tv,0.001)/S.V]);
+      const rp=vanDerWaals(S.n,Math.max(Tv,0.001),S.V,gd.a,gd.b);
+      if(rp!==null&&rp>0) realPts.push([Tv,rp]);
+    }
+    const allP=[...idealPts,...realPts].map(p=>p[1]).filter(p=>p>0);
+    const maxP=Math.max(...allP,S.P*1.1,1)*1.05;
+    const mx=t=>PAD.l+(t-Tmin)/(Tmax-Tmin)*pw;
+    const my=p=>PAD.t+ph-clamp(p,0,maxP)/maxP*ph;
+    markerXi=mx(S.T); markerYi=my(S.n*R_CONST*Math.max(S.T,0.001)/S.V);
+    const rp=vanDerWaals(S.n,Math.max(S.T,0.001),S.V,gd.a,gd.b);
+    if(rp!==null&&rp>0){markerXr=mx(S.T);markerYr=my(rp);}
+    return{mx,my,xLabel:'Temperature (K)',yLabel:'P (atm)'};
+  }
+
+  function buildVncurves(){
+    const nmin=0.1,nmax=5;
+    for(let i=0;i<=STEPS;i++){
+      const nv=nmin+(i/STEPS)*(nmax-nmin);
+      idealPts.push([nv, nv*R_CONST*S.T/S.P]);
+      realPts.push([nv, nv*R_CONST*S.T/S.P*(1-gd.b*nv*S.P/(nv*R_CONST*S.T))]);
+    }
+    const maxV=Math.max(...idealPts.map(p=>p[1]))*1.1;
+    const mx=n=>PAD.l+(n-nmin)/(nmax-nmin)*pw;
+    const my=v=>PAD.t+ph-clamp(v,0,maxV)/maxV*ph;
+    markerXi=mx(S.n);markerYi=my(S.n*R_CONST*S.T/S.P);
+    markerXr=mx(S.n);markerYr=my(S.n*R_CONST*S.T/S.P*(1-gd.b*S.n*S.P/(S.n*R_CONST*S.T)));
+    return{mx,my,xLabel:'Moles (mol)',yLabel:'V (L)'};
+  }
+
+  function buildGrahamCurve(){
+    const Mmin=2,Mmax=50;
+    for(let i=0;i<=STEPS;i++){
+      const Mv=Mmin+(i/STEPS)*(Mmax-Mmin);
+      idealPts.push([Mv, 1/Math.sqrt(Mv)]);
+    }
+    const maxR=Math.max(...idealPts.map(p=>p[1]))*1.1;
+    const mx=m=>PAD.l+(m-Mmin)/(Mmax-Mmin)*pw;
+    const my=r=>PAD.t+ph-clamp(r,0,maxR)/maxR*ph;
+    markerXi=mx(clamp(gd.M,Mmin,Mmax));markerYi=my(1/Math.sqrt(gd.M));
+    // Gas2 marker
+    const gd2=GASES[S.gas2];
+    const m2x=mx(clamp(gd2.M,Mmin,Mmax)),m2y=my(1/Math.sqrt(gd2.M));
+    return{mx,my,xLabel:'Molar Mass (g/mol)',yLabel:'Rate',gas2:{x:m2x,y:m2y}};
+  }
+
+  let info;
+  if(S.law==='boyle'||S.law==='combined'||S.law==='ideal') info=buildPVcurves();
+  else if(S.law==='charles') info=buildVTcurves();
+  else if(S.law==='gay') info=buildPTcurves();
+  else if(S.law==='avogadro') info=buildVncurves();
+  else if(S.law==='graham') info=buildGrahamCurve();
+
+  const{mx,my,xLabel,yLabel}=info;
+
+  // Draw IDEAL curve (always blue)
+  drawCurve(g,idealPts,mx,my,'#4f9eff',2.5,PAD,ph);
+
+  // Draw REAL curve (always red, even in ideal mode — show what WOULD happen)
+  if(realPts.length>1 && S.law!=='graham'){
+    drawCurve(g,realPts,mx,my,'#ff6b6b',2,PAD,ph);
+    // Shade the gap between curves
+    drawGapShading(g,idealPts,realPts,mx,my,PAD,ph);
+  }
+  if(info.gas2) drawDot(g,info.gas2.x,info.gas2.y,GASES[S.gas2].hex);
+
+  // Markers
+  if(markerXi!==undefined) drawDot(g,markerXi,markerYi,'#4f9eff');
+  if(markerXr!==undefined&&S.law!=='graham') drawDot(g,markerXr,markerYr,'#ff6b6b');
+
+  // Axis labels
+  g.fillStyle='#5a6f8a'; g.font='9px JetBrains Mono,monospace'; g.textAlign='center';
+  g.fillText(xLabel,PAD.l+pw/2,GH-3);
+  g.save(); g.translate(9,PAD.t+ph/2); g.rotate(-Math.PI/2);
+  g.fillText(yLabel,0,0); g.restore();
+
+  // Annotation: divergence callout for ideal law page
+  if((S.law==='ideal'||S.law==='boyle')&&realPts.length>1){
+    annotateDeviation(g,idealPts,realPts,mx,my,PAD,pw,ph);
+  }
+}
+
+function drawCurve(g,pts,mx,my,hex,lw,PAD,ph){
+  if(pts.length<2) return;
+  const[r,gg,b]=hex2rgb(hex);
+  g.save(); g.shadowColor=hex; g.shadowBlur=6;
+  g.strokeStyle=hex; g.lineWidth=lw; g.lineJoin='round';
+  g.beginPath();
+  pts.forEach(([x,y],i)=>{ const px=mx(x),py=my(y); i===0?g.moveTo(px,py):g.lineTo(px,py); });
+  g.stroke();
+  g.restore();
+  // Fill under
+  g.save();
+  g.beginPath();
+  pts.forEach(([x,y],i)=>{ const px=mx(x),py=my(y); i===0?g.moveTo(px,py):g.lineTo(px,py); });
+  const last=pts[pts.length-1],first=pts[0];
+  g.lineTo(mx(last[0]),PAD.t+ph+2); g.lineTo(mx(first[0]),PAD.t+ph+2); g.closePath();
+  const fill=g.createLinearGradient(0,PAD.t,0,PAD.t+ph);
+  fill.addColorStop(0,`rgba(${r},${gg},${b},0.15)`); fill.addColorStop(1,`rgba(${r},${gg},${b},0.01)`);
+  g.fillStyle=fill; g.fill(); g.restore();
+}
+
+function drawGapShading(g,iPts,rPts,mx,my,PAD,ph){
+  // Shade region between ideal and real curves
+  if(iPts.length<2||rPts.length<2) return;
+  const n=Math.min(iPts.length,rPts.length);
+  g.save(); g.globalAlpha=0.12;
+  g.beginPath();
+  for(let i=0;i<n;i++){ const px=mx(iPts[i][0]),py=my(iPts[i][1]); i===0?g.moveTo(px,py):g.lineTo(px,py); }
+  for(let i=n-1;i>=0;i--){ const px=mx(rPts[i][0]),py=my(rPts[i][1]); g.lineTo(px,py); }
+  g.closePath();
+  g.fillStyle='rgba(167,139,255,1)'; g.fill();
+  g.restore();
+}
+
+function annotateDeviation(g,iPts,rPts,mx,my,PAD,pw,ph){
+  // Find the point of max deviation
+  const n=Math.min(iPts.length,rPts.length);
+  let maxDev=0,maxI=0;
+  for(let i=0;i<n;i++){
+    const d=Math.abs(iPts[i][1]-rPts[i][1]);
+    if(d>maxDev){maxDev=d;maxI=i;}
+  }
+  if(maxDev<0.05) return;
+  const px=mx(iPts[maxI][0]);
+  const pyI=my(iPts[maxI][1]);
+  const pyR=my(rPts[maxI][1]);
+  const midY=(pyI+pyR)/2;
+  // Bracket line
+  g.save();
+  g.strokeStyle='rgba(167,139,255,0.6)'; g.lineWidth=1; g.setLineDash([3,3]);
+  g.beginPath(); g.moveTo(px,pyI); g.lineTo(px,pyR); g.stroke();
+  g.setLineDash([]);
+  // Label
+  g.fillStyle='rgba(167,139,255,0.85)'; g.font='bold 8px Space Grotesk,sans-serif'; g.textAlign='left';
+  g.fillText('\u0394P deviation',px+4,midY+3);
+  g.restore();
+}
+
+function drawDot(g,x,y,hex){
+  const[r,gg,b]=hex2rgb(hex);
+  g.save(); g.shadowColor=hex; g.shadowBlur=12;
+  g.fillStyle=hex; g.beginPath(); g.arc(x,y,5.5,0,Math.PI*2); g.fill();
+  g.shadowBlur=0; g.fillStyle='#fff';
+  g.beginPath(); g.arc(x,y,2.2,0,Math.PI*2); g.fill(); g.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AUTO-COMPUTE (gas law enforcement)
+// ═══════════════════════════════════════════════════════════════
+function autoCompute(changed){
+  if(S.law==='boyle'){
+    if(changed==='P'&&!S.lockedV) S.V=clamp(S.n*R_CONST*S.T/S.P,0.1,100);
+    else if(changed==='V'&&!S.lockedP) S.P=clamp(S.n*R_CONST*S.T/S.V,0.01,500);
+  } else if(S.law==='charles'){
+    if(changed==='T'&&!S.lockedV) S.V=clamp(S.n*R_CONST*S.T/S.P,0.1,100);
+    else if(changed==='V'&&!S.lockedT) S.T=clamp(S.P*S.V/(S.n*R_CONST),0,735);
+  } else if(S.law==='gay'){
+    if(changed==='T'&&!S.lockedP) S.P=clamp(S.n*R_CONST*S.T/S.V,0.01,500);
+    else if(changed==='P'&&!S.lockedT) S.T=clamp(S.P*S.V/(S.n*R_CONST),0,735);
+  } else if(S.law==='avogadro'){
+    if(changed==='N'){
+      const idealV = S.n*R_CONST*S.T/S.P;
+      if(idealV <= 100){
+        S.V = idealV;                          // normal: V expands, P stays locked
+      } else {
+        S.V = 100;                             // V maxed — container is rigid now
+        S.P = clamp(idealP(S.n,S.T,S.V),0.01,500); // P rises with added moles
+      }
+    }
+    else if(changed==='V'&&!S.lockedN) S.n=clamp(S.P*S.V/(R_CONST*S.T),0.1,5);
+  } else if(S.law==='combined'){
+    // PV/T = k. Use stored reference state from drag start so all 3 variables
+    // respond proportionally. k = P₁V₁/T₁ stays constant throughout the drag.
+    const ref = S._ref || {P:S.P, V:S.V, T:S.T};
+    const k = (ref.P * ref.V) / ref.T;
+    if(changed==='P'){
+      // P set by user. T stays at ref.T (not being dragged). Solve V.
+      S.T = ref.T;
+      S.V = clamp(k * S.T / S.P, 0.1, 100);
+    } else if(changed==='V'){
+      // V set by user. T stays at ref.T. Solve P.
+      S.T = ref.T;
+      S.P = clamp(k * S.T / S.V, 0.01, 500);
+    } else if(changed==='T'){
+      // T set by user. Use geometric split: P and V each scale by √(T/T₁)
+      // so both move visibly. This satisfies PV/T = k exactly.
+      const ratio = Math.sqrt(S.T / ref.T);
+      S.P = clamp(ref.P * ratio, 0.01, 500);
+      S.V = clamp(ref.V * ratio, 0.1, 100);
+    }
+  }
+  // Ideal: all variables free — no enforcement, Z-factor shows the deviation.
+  S.P=clamp(S.P,0.01,500); S.T=clamp(S.T,0,735);
+  S.V=clamp(S.V,0.1,100);  S.n=clamp(S.n,0.1,5);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UI READINGS
+// ═══════════════════════════════════════════════════════════════
+function updateUI(){
+  document.getElementById('pVal').textContent=S.P<1?S.P.toFixed(3):S.P<10?S.P.toFixed(2):S.P.toFixed(1);
+  document.getElementById('tVal').textContent=S.T.toFixed(0);
+  document.getElementById('vVal').textContent=S.V<1?S.V.toFixed(2):S.V.toFixed(1);
+  document.getElementById('nVal').textContent=S.n.toFixed(2);
+
+  document.getElementById('rP').textContent=S.P<1?S.P.toFixed(3):S.P<10?S.P.toFixed(2):S.P.toFixed(1);
+  document.getElementById('rT').textContent=S.T.toFixed(0)+' K';
+  document.getElementById('rTc').textContent=(S.T-273.15).toFixed(1)+' \u00b0C';
+  document.getElementById('rV').textContent=S.V<1?S.V.toFixed(3):S.V.toFixed(2);
+  document.getElementById('rN').textContent=S.n.toFixed(3);
+
+  // Molecule count: N = n × Nₐ = 6.022e23 × n
+  (function(){
+    const N = S.n * 6.022e23;
+    const exp = Math.floor(Math.log10(N));
+    const mant = (N / Math.pow(10, exp)).toFixed(3);
+    const supMap = {'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+    const expStr = String(exp).split('').map(c=>supMap[c]||c).join('');
+    document.getElementById('rMolecules').textContent = mant + ' × 10' + expStr;
+  })();
+
+  // PHASE CARD — show for single gas, or multi-gas summary
+  const keys = tankKeys();
+  const phase = getPhase(S.gas);
+  const gd2 = GASES[S.gas];
+  const phaseName  = phase==='solid' ? '❄️ Solid' : phase==='liquid' ? '💧 Liquid' : '💨 Gas';
+  const phaseColor = phase==='solid' ? '#b4e0ff' : phase==='liquid' ? gd2.hex : 'var(--accent3)';
+  if(keys.length <= 1){
+    document.getElementById('phaseVal').textContent = phaseName;
+    document.getElementById('phaseVal').style.color = phaseColor;
+    let tempHint = '', phaseDescTxt = '';
+    const Tb_P = gd2.boil ? boilT(S.gas, S.P) : null;
+    const Tm_P = gd2.melt ? meltT(S.gas, S.P) : null;
+    const Tb_disp = Tb_P ? Tb_P.toFixed(0)+' K at '+
+      (S.P<10?S.P.toFixed(2):S.P.toFixed(1))+' atm' : null;
+    if(phase==='solid'){
+      const nextT = Tm_P ?? (gd2.sublime ? gd2.sublime : null);
+      tempHint = nextT ? (Tm_P ? `Melts at ${Tm_P.toFixed(0)} K` : `Sublimes at ${gd2.sublime} K`) : 'No melting at 1 atm';
+      phaseDescTxt = 'Particles locked in lattice positions, vibrating in place.';
+    } else if(phase==='liquid'){
+      tempHint = Tb_disp ? `Boils at ${Tb_disp}` : '—';
+      phaseDescTxt = S.P > 2
+        ? `High pressure raises the boiling point — liquid at T above normal boil (${gd2.boil} K).`
+        : 'Particles flow freely but stay cohesive. Surface tension visible.';
+    } else {
+      const fromT = Tb_P ?? gd2.sublime;
+      tempHint = fromT ? `Boils at ${Tb_disp ?? gd2.sublime+' K'}` : 'Gas at all temps';
+      phaseDescTxt = gd2.sublime && S.P < 5.11
+        ? `CO₂ sublimates below 5.11 atm — skips liquid. Dry ice!`
+        : `Particles fill container freely. High kinetic energy.`;
+    }
+    document.getElementById('phaseTemp').textContent = tempHint;
+    document.getElementById('phaseDesc').textContent = phaseDescTxt;
+  } else {
+    // Multi-gas: summarise phases
+    const summary = keys.map(gk=>{ const ph=getPhase(gk); return `${GAS_FORMULAS[gk]}: ${ph==='solid'?'❄️':ph==='liquid'?'💧':'💨'}`; }).join(' · ');
+    document.getElementById('phaseVal').textContent = summary;
+    document.getElementById('phaseVal').style.color = 'var(--text)';
+    document.getElementById('phaseTemp').textContent = 'Mixed phases possible';
+    document.getElementById('phaseDesc').textContent = 'Each gas transitions independently — lighter gases boil at lower T than heavier ones.';
+  }
+  const pcBorder = phase==='solid'?'rgba(180,224,255,0.25)':phase==='liquid'?`rgba(${hex2rgb(gd2.hex).join(',')},0.3)`:'rgba(79,158,255,0.18)';
+  document.getElementById('phaseCard').style.borderColor = pcBorder;
+
+  // CRITICAL TEMPERATURE PANEL
+  updateTcPanel();
+
+  // DEVIATION CARD — always show; values computed from current T, V, n
+  const gd=GASES[S.gas];
+  // In ideal/combined mode all sliders are free — use S.P as the actual pressure.
+  // In other modes P is derived from V (Boyle's) or T (Gay-Lussac's), so compute from nRT/V.
+  const freeP = (S.law === 'ideal' || S.law === 'combined');
+  const Pideal = freeP ? S.P : idealP(S.n, S.T, S.V);   // nRT/V, or user-set P
+  const Preal  = vanDerWaals(S.n, S.T, S.V, gd.a, gd.b);        // van der Waals P
+  // Recompute Z consistently from the same Pideal so it matches the deviation display
+  const Z_display = freeP ? S.P*S.V/(S.n*R_CONST*S.T) : Pideal*S.V/(S.n*R_CONST*S.T);
+  document.getElementById('zVal').textContent=Z_display.toFixed(4);
+  const zPct=clamp((Z_display-0.5)/1.0*100,0,100);
+  document.getElementById('zNeedle').style.left=zPct+'%';
+  const badge=document.getElementById('zBadge');
+  if(Math.abs(Z_display-1)<0.03){badge.className='z-badge ideal';badge.textContent='Ideal behavior — Z = 1';}
+  else if(Z_display<1){badge.className='z-badge attract';badge.textContent='Attractive forces dominate — Z < 1';}
+  else{badge.className='z-badge repel';badge.textContent='Repulsive forces dominate — Z > 1';}
+
+  const devCard = document.getElementById('devCard');
+  devCard.classList.add('visible');
+
+  document.getElementById('devIdeal').textContent = Pideal.toFixed(4) + ' atm';
+
+  if(Preal !== null && Preal > 0){
+    document.getElementById('devReal').textContent = Preal.toFixed(4) + ' atm';
+    const delta = Preal - Pideal;
+    const pct   = (delta / Pideal * 100);
+    const sign  = delta >= 0 ? '+' : '';
+    const deltaEl = document.getElementById('devDelta');
+    deltaEl.textContent = sign + delta.toFixed(4) + ' atm (' + sign + pct.toFixed(2) + '%)';
+    deltaEl.className = 'dev-val' + (Math.abs(pct) < 0.5 ? ' zero' : delta > 0 ? ' pos' : ' neg');
+
+    let explain = '';
+    if(S.mode === 'ideal'){
+      explain = 'Simulation running in Ideal mode (intermolecular forces off). '
+        + 'Shown deviation is what van der Waals predicts would occur under these same conditions.';
+    } else if(Math.abs(pct) < 0.5){
+      explain = 'Gas behaves nearly ideally here — high T and/or low n/V minimizes '
+        + 'intermolecular force effects. van der Waals ≈ Ideal.';
+    } else if(delta < 0){
+      explain = 'Real P < Ideal P: Attractive forces (a = ' + gd.a + ' L²·atm/mol²) '
+        + 'pull molecules inward, reducing wall impact frequency. Z < 1.';
+    } else {
+      explain = 'Real P > Ideal P: Molecules occupy finite volume (b = ' + gd.b + ' L/mol), '
+        + 'reducing free space and increasing collision frequency. Z > 1.';
+    }
+    document.getElementById('devExplain').textContent = explain;
+  } else {
+    document.getElementById('devReal').textContent = 'N/A (V too small)';
+    document.getElementById('devDelta').textContent = '---';
+    document.getElementById('devDelta').className = 'dev-val';
+    document.getElementById('devExplain').textContent =
+      'Volume too compressed for van der Waals solution — excluded volume (nb) ≥ V.';
+  }
+
+  // Graham
+  if(S.law==='graham'){
+    const g1=GASES[S.gas],g2=GASES[S.gas2];
+    document.getElementById('rGraham').textContent=g1.name+' / '+g2.name+' = '+Math.sqrt(g2.M/g1.M).toFixed(3);
+    document.getElementById('grahamResult').style.display='block';
+  } else {
+    document.getElementById('grahamResult').style.display='none';
+  }
+
+  updateKineticsCard();
+  updateForceBar();
+  drawGraph();
+}
+
+function updateTcPanel(){
+  const gk  = S.gas;
+  const g   = GASES[gk];
+  const T   = S.T;
+  const Tc  = g.Tc;
+  const sc  = isSupercritical(gk);
+
+  // Temperature readouts
+  document.getElementById('tcCurrentT').textContent = T.toFixed(0) + ' K';
+  document.getElementById('tcCritT').textContent    = Tc.toFixed(1) + ' K';
+
+  // Bar: show T/Tc ratio; bar fills from 0 to current T, marker sits at Tc
+  // Scale: 0 → 1.5×Tc so there's headroom above Tc
+  const barMax  = Tc * 1.5;
+  const tFrac   = clamp(T   / barMax, 0, 1);
+  const tcFrac  = clamp(Tc  / barMax, 0, 1);
+
+  // Color the fill: blue (cold) → green (near Tc) → orange/red (above Tc)
+  let fillColor;
+  if(sc){
+    // Above Tc — gradient orange→red
+    const hot = clamp((T - Tc) / Tc, 0, 1);
+    const r = Math.round(255);
+    const gr = Math.round(160 - hot * 120);
+    fillColor = `rgb(255,${gr},50)`;
+  } else {
+    // Below Tc — gradient blue→green
+    const warm = clamp(T / Tc, 0, 1);
+    const r = Math.round(79  + warm * 80);
+    const gr = Math.round(158 + warm * 60);
+    const b  = Math.round(255 - warm * 180);
+    fillColor = `rgb(${r},${gr},${b})`;
+  }
+
+  document.getElementById('tcBarFill').style.width      = (tFrac * 100).toFixed(1) + '%';
+  document.getElementById('tcBarFill').style.background = fillColor;
+  document.getElementById('tcBarMarker').style.left     = (tcFrac * 100).toFixed(1) + '%';
+  document.getElementById('tcBarMidLabel').textContent  = Math.round(Tc / 2) + ' K';
+  document.getElementById('tcBarMaxLabel').textContent  = Math.round(barMax) + ' K';
+
+  // Can liquefy?
+  const liquefyEl = document.getElementById('tcCanLiquefy');
+  if(sc){
+    liquefyEl.textContent = '✗ No — T > Tᶜ';
+    liquefyEl.style.color = '#ff6b6b';
+  } else {
+    liquefyEl.textContent = '✓ Yes — T < Tᶜ';
+    liquefyEl.style.color = 'var(--accent3)';
+  }
+
+  // Supercritical warning banner
+  const warning = document.getElementById('scWarning');
+  const warnBody = document.getElementById('scWarningBody');
+  if(sc){
+    warning.classList.add('visible');
+    warnBody.textContent =
+      `${g.name} is above its critical temperature (Tᶜ = ${Tc} K). `
+      + `No amount of pressure can liquefy it — it exists as a gas or supercritical fluid. `
+      + `To liquefy ${GAS_FORMULAS[gk]}, first cool it below ${Tc} K, then apply pressure above ${g.Pc} atm.`;
+  } else {
+    warning.classList.remove('visible');
+  }
+
+  // Update tcCard border to signal state
+  document.getElementById('tcCard').style.borderColor = sc
+    ? 'rgba(255,209,102,.5)'
+    : 'rgba(167,139,255,.25)';
+}
+
+function updateKineticsCard(){
+  const keys = tankKeys();
+  const rowsEl   = document.getElementById('kineticsRows');
+  const noteEl   = document.getElementById('kineticsNote');
+  const forceEl  = document.getElementById('kineticsForce');
+
+  if(keys.length === 0){
+    rowsEl.innerHTML = '<div style="font-size:.7rem;color:var(--muted)">Add a gas to see kinetics</div>';
+    forceEl.innerHTML = '';
+    return;
+  }
+
+  noteEl.style.display = S.mode === 'ideal' ? '' : 'none';
+
+  rowsEl.innerHTML = keys.map(gk => {
+    const g = GASES[gk];
+    const c = collCounters[gk] || {wallPerSec:0, molPerSec:0, forceAvg:0};
+    // Maxwell-Boltzmann mean speed: v = sqrt(8RT/πM), M in kg/mol
+    const vAvg = Math.sqrt(8 * R_SI * Math.max(S.T,1) / (Math.PI * g.M * 1e-3));
+
+    const wallStr = c.wallPerSec >= 1000
+      ? (c.wallPerSec/1000).toFixed(1)+'k'
+      : Math.round(c.wallPerSec).toString();
+
+    const molStr = S.mode === 'real'
+      ? (c.molPerSec >= 1000 ? (c.molPerSec/1000).toFixed(1)+'k' : Math.round(c.molPerSec).toString())
+      : '—';
+
+    const vStr = Math.round(vAvg);
+
+    return `<div class="kinetics-gas-row">
+      <div class="kinetics-gas-label" style="color:${g.hex}">${GAS_FORMULAS[gk]}</div>
+      <div class="kinetics-stats">
+        <div class="kinetics-stat">
+          <div class="kinetics-stat-val" style="color:${g.hex}">${wallStr}</div>
+          <div class="kinetics-stat-lbl">wall/s</div>
+        </div>
+        <div class="kinetics-stat">
+          <div class="kinetics-stat-val" style="color:${g.hex}">${molStr}</div>
+          <div class="kinetics-stat-lbl">mol/s</div>
+        </div>
+        <div class="kinetics-stat">
+          <div class="kinetics-stat-val" style="color:${g.hex}">${vStr}</div>
+          <div class="kinetics-stat-lbl">m/s</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Wall force rows
+  forceEl.innerHTML = keys.map(gk => {
+    const g = GASES[gk];
+    const c = collCounters[gk] || {forceAvg:0};
+    // Format force: use pN/nN/µN/mN/N depending on magnitude
+    let fStr = '—';
+    if(S.mode === 'real' && c.forceAvg > 0){
+      const f = c.forceAvg;
+      if     (f < 1e-9)  fStr = (f*1e12).toFixed(1)+' pN';
+      else if(f < 1e-6)  fStr = (f*1e9 ).toFixed(1)+' nN';
+      else if(f < 1e-3)  fStr = (f*1e6 ).toFixed(1)+' µN';
+      else if(f < 1)     fStr = (f*1e3 ).toFixed(2)+' mN';
+      else               fStr = f.toFixed(3)+' N';
+    }
+    return `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px;">
+      <span style="font-size:.58rem;color:var(--muted)">Avg wall force ${GAS_FORMULAS[gk]}</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:.7rem;font-weight:600;color:${g.hex}">${fStr}</span>
+    </div>`;
+  }).join('');
+}
+
+
+// ── Force Bar ────────────────────────────────────────────────
+const _fb = { peak: 0, peakTimer: 0, displayF: 0, maxSeen: 0 };
+
+function forceColor(frac){
+  const stops = [
+    [0.00, [30,  120, 255]],
+    [0.20, [0,   210, 255]],
+    [0.42, [80,  255, 160]],
+    [0.62, [255, 220, 50 ]],
+    [0.80, [255, 140, 30 ]],
+    [1.00, [255, 60,  60 ]],
+  ];
+  frac = Math.max(0, Math.min(1, frac));
+  let lo = stops[0], hi = stops[stops.length-1];
+  for(let i = 0; i < stops.length-1; i++){
+    if(frac >= stops[i][0] && frac <= stops[i+1][0]){ lo = stops[i]; hi = stops[i+1]; break; }
+  }
+  const t = lo[0]===hi[0] ? 0 : (frac-lo[0])/(hi[0]-lo[0]);
+  const r = Math.round(lo[1][0] + t*(hi[1][0]-lo[1][0]));
+  const g = Math.round(lo[1][1] + t*(hi[1][1]-lo[1][1]));
+  const b = Math.round(lo[1][2] + t*(hi[1][2]-lo[1][2]));
+  return `rgb(${r},${g},${b})`;
+}
+
+function formatForce(f){
+  if(f <= 0) return {val:'\u2014', unit:'N'};
+  if(f < 1e-6) return {val:(f*1e9).toFixed(1), unit:'nN'};
+  if(f < 1e-3) return {val:(f*1e6).toFixed(1), unit:'\u00b5N'};
+  if(f < 1)    return {val:(f*1e3).toFixed(2), unit:'mN'};
+  if(f < 1000) return {val:f.toFixed(2),       unit:'N'};
+  return           {val:(f/1000).toFixed(2),    unit:'kN'};
+}
+
+function updateForceBar(){
+  // Derive pressure from current T, V, n rather than the slider value —
+  // this means heating/cooling visibly changes force even when P-slider is locked.
+  // Ideal mode: P = nRT/V.  Real mode: van der Waals P.
+  const n = S.n, T = Math.max(S.T, 0.001), V = Math.max(S.V, 0.001);
+  let P_calc;
+  if(S.mode === 'real'){
+    const gd = GASES[S.gas];
+    const vdw = vanDerWaals(n, T, V, gd.a, gd.b);
+    P_calc = (vdw !== null && vdw > 0) ? vdw : idealP(n, T, V);
+  } else {
+    P_calc = idealP(n, T, V);   // P = nRT/V (atm)
+  }
+
+  const V_m3  = V * 1e-3;
+  const side  = Math.cbrt(V_m3);
+  const A_m2  = 6 * side * side;
+  const P_pa  = P_calc * 101325;
+  const F     = P_pa * A_m2;
+
+  _fb.displayF += (F - _fb.displayF) * 0.18;
+  _fb.maxSeen   = Math.max(_fb.maxSeen * 0.9995, F * 1.5, 1);
+  const frac    = Math.min(_fb.displayF / _fb.maxSeen, 1);
+
+  if(F >= _fb.peak){ _fb.peak = F; _fb.peakTimer = 90; }
+  else if(_fb.peakTimer > 0){ _fb.peakTimer--; }
+  else { _fb.peak = Math.max(_fb.peak * 0.97, F); }
+  const peakFrac = Math.min(_fb.peak / _fb.maxSeen, 1);
+
+  const col = forceColor(frac);
+
+  const fillEl  = document.getElementById('forceBarFill');
+  const glowEl  = document.getElementById('forceBarGlow');
+  const peakEl  = document.getElementById('forceBarPeak');
+  const valEl   = document.getElementById('forceBarVal');
+  const unitEl  = document.getElementById('forceBarUnit');
+
+  fillEl.style.height = (frac*100).toFixed(1)+'%';
+  fillEl.style.background = `linear-gradient(0deg, ${forceColor(frac)} 0%, ${forceColor(Math.max(0,frac-0.35))} 55%, ${forceColor(Math.max(0,frac-0.6))} 100%)`;
+
+  glowEl.style.background = col;
+  glowEl.style.opacity = (frac * 0.75).toFixed(2);
+
+  if(peakFrac > 0.02){
+    peakEl.style.bottom  = (peakFrac*100).toFixed(1)+'%';
+    peakEl.style.opacity = '1';
+    peakEl.style.background = col;
+    peakEl.style.boxShadow  = `0 0 8px ${col}`;
+  } else { peakEl.style.opacity='0'; }
+
+  valEl.style.color = col;
+  const {val, unit} = formatForce(_fb.displayF);
+  valEl.textContent = val;
+  unitEl.textContent = unit;
+
+  // Tick labels (built once, updated values each frame)
+  const ticksEl = document.getElementById('forceTicks');
+  if(!ticksEl._built){
+    ticksEl._built = true;
+    ticksEl.innerHTML = Array.from({length:5},(_,i)=>
+      `<div class="force-tick-lbl" id="ftick${i}"></div>`).join('');
+  }
+  for(let i=0;i<5;i++){
+    const el=document.getElementById('ftick'+i);
+    if(el){ const {val:tv,unit:tu}=formatForce(_fb.maxSeen*(4-i)/4); el.textContent=tv+' '+tu; }
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// AUDIO — Metronome click on wall collisions
+// ═══════════════════════════════════════════════════════════════
+let _audioCtx = null;
+function getAudioCtx(){
+  if(!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if(_audioCtx.state === 'suspended') _audioCtx.resume();
+  return _audioCtx;
+}
+
+// Throttle: merge all collisions within one animation frame into a single click.
+// We track the maximum speed seen this frame and fire once per frame at most.
+const _snd = { pending: false, maxVp: 0, lastTime: 0, muted: true };
+
+function scheduleClick(vp){
+  if(_snd.muted) return;
+  // Gap is a direct function of vp (particle speed at bounce).
+  // vp already encodes T via spdMult = sqrt(T/273), so the tempo changes
+  // instantly whenever T, V, P, or n sliders move — no stale counter needed.
+  //
+  // vp range in sim: ~0.05 (cold/slow) to ~6 (hot/fast, after spdMult applied)
+  //   vp≈0.05 → gap≈500ms (slow, audible individual taps)
+  //   vp≈1.0  → gap≈200ms (moderate tempo)
+  //   vp≈3+   → gap≈ 35ms (rapid tapping, clearly intense)
+  const now = performance.now();
+  const norm = Math.min(vp / 4, 1);                       // 0..1
+  const dynamicGap = 500 - norm * 465;                    // 500ms → 35ms
+  if(now - _snd.lastTime < dynamicGap){
+    if(vp > _snd.maxVp) _snd.maxVp = vp;
+    return;
+  }
+  if(vp > _snd.maxVp) _snd.maxVp = vp;
+  if(!_snd.pending){
+    _snd.pending = true;
+    Promise.resolve().then(fireClick);
+  }
+}
+
+function fireClick(){
+  _snd.pending = false;
+  _snd.lastTime = performance.now();
+  const vp = _snd.maxVp;
+  _snd.maxVp = 0;
+
+  const ctx = getAudioCtx();
+  const now = ctx.currentTime;
+
+  // Speed range in the sim: roughly 0.5 – 6 px/frame
+  // Map to gain with a guaranteed audible floor
+  const norm = Math.min(vp / 5, 1);               // 0..1
+  const gain = 0.08 + norm * 0.55;                // 0.08 (soft) → 0.63 (hard)
+
+  // ── Wooden "tok" click synthesis ────────────────────────────
+  // 1. Very short noise burst → body of the click
+  const bufLen = ctx.sampleRate * 0.04;            // 40 ms of noise
+  const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for(let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = buf;
+
+  // Band-pass filter: wood resonates ~800–2000 Hz
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 1100 + norm * 400;         // harder hit → slightly brighter
+  bp.Q.value = 1.8;
+
+  // High-shelf cut to soften harsh high end
+  const shelf = ctx.createBiquadFilter();
+  shelf.type = 'highshelf';
+  shelf.frequency.value = 3500;
+  shelf.gain.value = -10;
+
+  // Amplitude envelope: instant attack, fast exponential decay (~25 ms)
+  const gainNode = ctx.createGain();
+  gainNode.gain.setValueAtTime(gain, now);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.028 + norm * 0.012);
+
+  // 2. Thin low transient "thud" underneath
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(180 + norm * 80, now);
+  osc.frequency.exponentialRampToValueAtTime(60, now + 0.025);
+
+  const oscGain = ctx.createGain();
+  oscGain.gain.setValueAtTime(gain * 0.4, now);
+  oscGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.022);
+
+  // Wire up
+  noise.connect(bp);
+  bp.connect(shelf);
+  shelf.connect(gainNode);
+  gainNode.connect(ctx.destination);
+
+  osc.connect(oscGain);
+  oscGain.connect(ctx.destination);
+
+  noise.start(now);
+  noise.stop(now + 0.04);
+  osc.start(now);
+  osc.stop(now + 0.03);
+}
+
+// Log-scale slider converters
+// P: slider 0–1000 → 0.01–500 atm
+const P_MIN=0.01, P_MAX=500;
+function sliderToP(pos){ return P_MIN * Math.pow(P_MAX/P_MIN, pos/1000); }
+function pToSlider(p)  { return Math.round(Math.log(p/P_MIN)/Math.log(P_MAX/P_MIN)*1000); }
+// V: slider 0–1000 → 0.1–100 L
+const V_MIN=0.1,  V_MAX=100;
+function sliderToV(pos){ return V_MIN * Math.pow(V_MAX/V_MIN, pos/1000); }
+function vToSlider(v)  { return Math.round(Math.log(v/V_MIN)/Math.log(V_MAX/V_MIN)*1000); }
+
+function syncSliders(){
+  document.getElementById('pSlider').value=pToSlider(clamp(S.P,P_MIN,P_MAX));
+  document.getElementById('tSlider').value=S.T;
+  document.getElementById('vSlider').value=vToSlider(clamp(S.V,V_MIN,V_MAX));
+  document.getElementById('nSlider').value=S.n;
+}
+
+function updateLockUI(){
+  const keyMap = {P:'P', T:'T', V:'V', N:'n'};
+  ['P','T','V','N'].forEach(v=>{
+    const btn=document.getElementById('lock'+v), locked=S['locked'+v];
+    btn.classList.toggle('locked', locked);
+    btn.textContent = locked ? keyMap[v]+' locked' : 'Lock '+keyMap[v];
+    // Dim the slider group when locked
+    const group = btn.closest('.slider-group');
+    if(group) group.classList.toggle('is-locked', locked);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LAW SETUP
+// ═══════════════════════════════════════════════════════════════
+function setLaw(law){
+  S.law=law;
+  document.querySelectorAll('.law-tab').forEach(t=>t.classList.toggle('active',t.dataset.law===law));
+  const L=LAWS[law];
+  document.getElementById('eqLaw').textContent=L.name;
+  document.getElementById('eqFormula').textContent=L.formula;
+  document.getElementById('eqDesc').textContent=L.desc;
+  document.getElementById('lawInfoTitle').textContent=L.name;
+  document.getElementById('lawInfoText').textContent=L.info;
+  document.getElementById('graphTitle').textContent=L.gy+' vs '+L.gx;
+  document.getElementById('grahamPanel').style.display=law==='graham'?'block':'none';
+  document.getElementById('realLegendItem').style.display=law==='graham'?'none':'flex';
+
+  S.lockedP=L.lockP; S.lockedT=L.lockT; S.lockedV=L.lockV; S.lockedN=L.lockN;
+  S._ref = null;
+  syncStateFromTank();
+  updateLockUI();
+  autoCompute('T');
+  syncSliders(); spawnAll(); updateUI();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EVENTS
+// ═══════════════════════════════════════════════════════════════
+[['pSlider','P'],['tSlider','T'],['vSlider','V']].forEach(([id,key])=>{
+  const el = document.getElementById(id);
+  el.addEventListener('mousedown', ()=>{ if(S.law==='combined') S._ref={P:S.P,V:S.V,T:S.T}; });
+  el.addEventListener('touchstart',()=>{ if(S.law==='combined') S._ref={P:S.P,V:S.V,T:S.T}; }, {passive:true});
+  el.addEventListener('input',e=>{
+    const lk='locked'+key;
+    if(S[lk]){ syncSliders(); return; }  // restore log position
+    const raw=parseFloat(e.target.value);
+    if(key==='P')      S.P=clamp(sliderToP(raw),P_MIN,P_MAX);
+    else if(key==='T') S.T=raw;
+    else               S.V=clamp(sliderToV(raw),V_MIN,V_MAX);
+    autoCompute(key); syncSliders(); updateUI();
+  });
+});
+
+// n-slider: scales all tank gases proportionally
+document.getElementById('nSlider').addEventListener('input',e=>{
+  if(S.lockedN){e.target.value=S.n;return;}
+  const newN = parseFloat(e.target.value);
+  const keys = tankKeys();
+  if(keys.length === 0){S.n=newN;return;}
+  const oldN = tankN();
+  const scale = newN / Math.max(oldN, 0.01);
+  keys.forEach(gk=>{ TANK[gk]=Math.round(TANK[gk]*scale*10)/10; if(TANK[gk]<0.1)TANK[gk]=0.1; });
+  syncStateFromTank(); buildGasGrid(); updateTankStrip();
+  autoCompute('N'); syncSliders(); updateUI();
+});
+
+document.getElementById('stpBtn').addEventListener('click', () => {
+  // STP: 273.15 K, 1 atm — unlock any locked vars first so values can be set
+  S.P = 1.0; S.T = 273; S.V = 22.4; S.n = tankN() || 1.0;
+  syncSliders(); spawnAll(); updateUI();
+  // Flash the button green briefly
+  const btn = document.getElementById('stpBtn');
+  btn.classList.add('active');
+  setTimeout(() => btn.classList.remove('active'), 1200);
+});
+
+document.getElementById('lawTabs').addEventListener('click',e=>{
+  const t=e.target.closest('.law-tab'); if(t) setLaw(t.dataset.law);
+});
+
+// ═══════════════════════════════════════════════════════════════
+// GAS GRID UI — dynamic multi-select
+// ═══════════════════════════════════════════════════════════════
+const GAS_FORMULAS = {H2:'H₂',He:'He',N2:'N₂',O2:'O₂',CO2:'CO₂',CH4:'CH₄',NH3:'NH₃',Ar:'Ar',H2O:'H₂O',Ne:'Ne'};
+
+function buildGasGrid(){
+  const grid = document.getElementById('gasGrid');
+  grid.innerHTML = '';
+  Object.entries(GASES).forEach(([key, g]) => {
+    const btn = document.createElement('div');
+    btn.className = 'gas-btn' + (TANK[key] ? ' in-tank' : '');
+    btn.dataset.gas = key;
+    btn.style.borderColor = TANK[key] ? g.hex : '';
+    btn.innerHTML = `
+      <div class="gas-check" style="color:${g.hex}">+</div>
+      <div class="gas-formula" style="color:${g.hex}">${GAS_FORMULAS[key]}</div>
+      <div class="gas-name">${g.name}</div>
+      <div class="gas-moles-row">
+        <button class="mol-btn" data-action="dec" data-gas="${key}">−</button>
+        <span class="mol-val" id="molVal_${key}" style="color:${g.hex}">${(TANK[key]||0).toFixed(1)}</span>
+        <button class="mol-btn" data-action="inc" data-gas="${key}">+</button>
+      </div>`;
+    grid.appendChild(btn);
+  });
+}
+
+function updateTankStrip(){
+  const strip = document.getElementById('tankStrip');
+  const keys = tankKeys();
+  if(keys.length === 0){
+    strip.innerHTML = '<span class="tank-empty">Tank is empty — click a gas to add it</span>';
+    return;
+  }
+  strip.innerHTML = keys.map(gk => {
+    const g = GASES[gk];
+    return `<div class="tank-chip" style="background:${g.hex}22;border:1px solid ${g.hex}55;color:${g.hex}">${GAS_FORMULAS[gk]} <span style="opacity:.7">${TANK[gk].toFixed(1)} mol</span></div>`;
+  }).join('');
+}
+
+document.getElementById('gasGrid').addEventListener('click', e => {
+  const btn = e.target.closest('.gas-btn'); if(!btn) return;
+  const molBtn = e.target.closest('.mol-btn');
+
+  if(molBtn){
+    e.stopPropagation();
+    const gk = molBtn.dataset.gas;
+    const action = molBtn.dataset.action;
+    if(!TANK[gk]) return;
+    TANK[gk] = Math.round((TANK[gk] + (action==='inc' ? 0.5 : -0.5)) * 10) / 10;
+    if(TANK[gk] <= 0){ delete TANK[gk]; }
+    else { TANK[gk] = Math.min(TANK[gk], 5); }
+    syncStateFromTank(); buildGasGrid(); updateTankStrip();
+    spawnAll(); updateUI(); return;
+  }
+
+  const gk = btn.dataset.gas;
+  if(TANK[gk]){
+    delete TANK[gk];
+  } else {
+    TANK[gk] = 1.0;
+  }
+  syncStateFromTank(); buildGasGrid(); updateTankStrip();
+  spawnAll(); updateUI();
+});
+
+document.getElementById('gasGrid2').addEventListener('click',e=>{
+  const b=e.target.closest('.gas-btn'); if(!b) return;
+  S.gas2=b.dataset.gas2;
+  document.querySelectorAll('#gasGrid2 .gas-btn').forEach(x=>x.classList.toggle('active',x.dataset.gas2===S.gas2));
+  spawnAll(); updateUI();
+});
+
+document.getElementById('modeToggle').addEventListener('click',e=>{
+  const b=e.target.closest('.mode-btn'); if(!b) return;
+  S.mode=b.dataset.mode;
+  document.querySelectorAll('.mode-btn').forEach(x=>x.classList.toggle('active',x.dataset.mode===S.mode));
+  autoCompute('T'); syncSliders(); updateUI();
+});
+
+['P','T','V','N'].forEach(v=>{
+  document.getElementById('lock'+v).addEventListener('click',()=>{S['locked'+v]=!S['locked'+v];updateLockUI();});
+});
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+
+function simLoop(){ stepParticles(); drawSim(); updateForceBar(); requestAnimationFrame(simLoop); }
+
+window.addEventListener('load',()=>{
+  // Seed tank with H2
+  TANK['H2'] = 1.0;
+  syncStateFromTank();
+  buildGasGrid();
+  updateTankStrip();
+  initBG(); initSim(); setLaw('boyle'); simLoop();
+});
+</script>
+</body>
+</html>
